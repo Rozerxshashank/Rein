@@ -100,17 +100,20 @@ export class InputHandler {
                         return;
                     }
                     console.log(`Pressing keys:`, nutKeys);
-                    for (const k of nutKeys) {
-                        if (typeof(k) == "string") {
-                            await keyboard.type(k as string);
-                        } else {
-                            await keyboard.pressKey(k as Key);
+                    const pressedKeys: Key[] = [];
+                    try{
+                        for (const k of nutKeys) {
+                            if (typeof(k) === "string") {
+                                await keyboard.type(k as string);
+                            } else {
+                                await keyboard.pressKey(k as Key);
+                                pressedKeys.push(k);
+                            }
                         }
-                    }
-                    await new Promise(resolve => setTimeout(resolve, 10));
-                    for (const k of [...nutKeys].reverse()) {
-                        if (typeof(k) != "string") {
-                            await keyboard.releaseKey(k as Key);
+                        await new Promise(resolve => setTimeout(resolve, 10));
+                    }finally{
+                        for (const k of pressedKeys.reverse()) {
+                            await keyboard.releaseKey(k);
                         }
                     }
                     console.log(`Combo complete: ${msg.keys.join('+')}`);

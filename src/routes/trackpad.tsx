@@ -47,6 +47,10 @@ function TrackpadPage() {
                 setBuffer([]);
                 return;
             }
+            if (key !== 'unidentified' && key.length > 1) {
+                e.preventDefault();
+                handleModifier(key);
+            }
             return;
         }
         if (key === 'backspace') send({ type: 'key', key: 'backspace' });
@@ -118,7 +122,9 @@ function TrackpadPage() {
         const val = (e.target as HTMLInputElement).value;
         if (val) {
             // Don't send text during modifier mode
-            if (modifier === "Release") {
+            if (modifier !== "Release") {
+                handleModifier(val);
+            }else{
                 sendText(val);
             }
             (e.target as HTMLInputElement).value = '';

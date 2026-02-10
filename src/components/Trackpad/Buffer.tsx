@@ -1,7 +1,7 @@
 import React from "react";
 
 interface ControlBarProps {
-	bufferText: String
+	bufferText: string
 }
 
 export const BufferBar: React.FC<ControlBarProps> = ({bufferText}) => {

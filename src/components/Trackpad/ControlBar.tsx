@@ -1,6 +1,5 @@
+import { ModifierState } from "@/types";
 import React from "react";
-
-export type ModifierState = "Active" | "Release" | "Hold";
 
 interface ControlBarProps {
 	scrollMode: boolean;
@@ -29,9 +28,9 @@ export const ControlBar: React.FC<ControlBarProps> = ({
 	const getModifierButtonClass = () => {
 		switch(modifier) {
 			case "Active":
-				return "btn-warning"; 
+				return "btn-success"; 
 			case "Hold":
-				return "btn-success";
+				return "btn-warning";
 			case "Release":
 			default:
 				return "btn-secondary";
@@ -41,12 +40,12 @@ export const ControlBar: React.FC<ControlBarProps> = ({
 	const getModifierLabel = () => {
 		switch(modifier) {
 			case "Active":
-				return "Mod: +Key";
+				return "Press";
 			case "Hold":
-				return "Mod: Send";
+				return "Release";
 			case "Release":
 			default:
-				return "Modifier";
+				return "Hold";
 		}
 	};
 
