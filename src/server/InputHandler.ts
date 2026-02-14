@@ -5,7 +5,7 @@ export interface InputMessage {
     type: 'move' | 'click' | 'scroll' | 'key' | 'text' | 'zoom' | 'combo';
     dx?: number;
     dy?: number;
-    button?: 'left' | 'right' | 'middle';
+    button?: 'left' | 'right'' | 'middle';
     press?: boolean;
     key?: string;
     keys?: string[];
@@ -14,7 +14,12 @@ export interface InputMessage {
 }
 
 export class InputHandler {
-    private lastEventTime = 0;
+    private lastMoveTime = 0;
+    private lastScrollTime = 0;
+    private pendingMove: InputMessage | null = null;
+    private pendingScroll: InputMessage | null = null;
+    private moveTimer: ReturnType<typeof setTimeout> | null = null;
+    private scrollTimer: ReturnType<typeof setTimeout> | null = null;
 
     constructor() {
         mouse.config.mouseSpeed = 1000;
@@ -36,12 +41,40 @@ export class InputHandler {
         }
 
         // Throttling: Limit high-frequency events to ~60fps (16ms)
-        if (msg.type === 'move' || msg.type === 'scroll') {
+        if (msg.type === 'move') {
             const now = Date.now();
-            if (now - this.lastEventTime < 16) {
+            if (now - this.lastMoveTime < 16) {
+                this.pendingMove = msg;
+                if (!this.moveTimer) {
+                    this.moveTimer = setTimeout(() => {
+                        this.moveTimer = null;
+                        if (this.pendingMove) {
+                            const pending = this.pendingMove;
+                            this.pendingMove = null;
+                            this.handleMessage(pending);
+                        }
+                    }, 16);
+                }
                 return;
             }
-            this.lastEventTime = now;
+            this.lastMoveTime = now;
+        } else if (msg.type === 'scroll') {
+            const now = Date.now();
+            if (now - this.lastScrollTime < 16) {
+                this.pendingScroll = msg;
+                if (!this.scrollTimer) {
+                    this.scrollTimer = setTimeout(() => {
+                        this.scrollTimer = null;
+                        if (this.pendingScroll) {
+                            const pending = this.pendingScroll;
+                            this.pendingScroll = null;
+                            this.handleMessage(pending);
+                        }
+                    }, 16);
+                }
+                return;
+            }
+            this.lastScrollTime = now;
         }
 
         switch (msg.type) {
