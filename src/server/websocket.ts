@@ -1,6 +1,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { InputHandler, InputMessage } from './InputHandler';
-import { storeToken, isKnownToken, touchToken, hasTokens, generateToken } from './tokenStore';
+import { storeToken, isKnownToken, touchToken, generateToken, getActiveToken } from './tokenStore';
 import os from 'os';
 import fs from 'fs';
 import { IncomingMessage } from 'http';
@@ -53,14 +53,6 @@ export function createWsServer(server: any) {
             return;
         }
 
-        // First remote connection ever — accept and store the token
-        if (!hasTokens()) {
-            storeToken(token);
-            wss.handleUpgrade(request, socket, head, (ws) => {
-                wss.emit('connection', ws, request, token, false);
-            });
-            return;
-        }
 
         // Validate against known tokens
         if (!isKnownToken(token)) {
@@ -103,9 +95,15 @@ export function createWsServer(server: any) {
                         ws.send(JSON.stringify({ type: 'auth-error', error: 'Only localhost can generate tokens' }));
                         return;
                     }
-                    const newToken = generateToken();
-                    storeToken(newToken);
-                    ws.send(JSON.stringify({ type: 'token-generated', token: newToken }));
+
+                    // Idempotent: return active token if one exists
+                    let tokenToReturn = getActiveToken();
+                    if (!tokenToReturn) {
+                        tokenToReturn = generateToken();
+                        storeToken(tokenToReturn);
+                    }
+
+                    ws.send(JSON.stringify({ type: 'token-generated', token: tokenToReturn }));
                     return;
                 }
 

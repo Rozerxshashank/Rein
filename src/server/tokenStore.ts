@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 interface TokenEntry {
     token: string;
@@ -8,10 +9,14 @@ interface TokenEntry {
     lastUsed: number;
 }
 
-const TOKENS_FILE = path.resolve('./src/tokens.json');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const TOKENS_FILE = path.resolve(__dirname, '../tokens.json');
 const EXPIRY_MS = 10 * 24 * 60 * 60 * 1000; // 10 days
 
 let tokens: TokenEntry[] = [];
+let lastSaveTime = 0;
+const SAVE_THROTTLE_MS = 60 * 1000; // 1 minute
 
 function load(): void {
     try {
@@ -23,9 +28,13 @@ function load(): void {
     }
 }
 
-function save(): void {
+function save(force = false): void {
+    const now = Date.now();
+    if (!force && (now - lastSaveTime) < SAVE_THROTTLE_MS) return;
+
     try {
         fs.writeFileSync(TOKENS_FILE, JSON.stringify(tokens, null, 2));
+        lastSaveTime = now;
     } catch (e) {
         console.error('Failed to persist tokens:', e);
     }
@@ -35,7 +44,7 @@ function purgeExpired(): void {
     const now = Date.now();
     const before = tokens.length;
     tokens = tokens.filter(t => (now - t.lastUsed) < EXPIRY_MS);
-    if (tokens.length !== before) save();
+    if (tokens.length !== before) save(true);
 }
 
 /** Constant-time string comparison to prevent timing attacks. */
@@ -61,7 +70,7 @@ export function storeToken(token: string): void {
         const now = Date.now();
         tokens.push({ token, createdAt: now, lastUsed: now });
     }
-    save();
+    save(true);
 }
 
 /** Check if a token is already known/stored on the server. */
@@ -75,9 +84,17 @@ export function touchToken(token: string): void {
     const entry = tokens.find(t => timingSafeEqual(t.token, token));
     if (entry) {
         entry.lastUsed = Date.now();
-        // Persist periodically — save only if >60s since last save
-        // to avoid excessive disk I/O on every message
+        save(); // Throttled internally
     }
+}
+
+/** Returns the most recently used active token, if any. */
+export function getActiveToken(): string | null {
+    purgeExpired();
+    if (tokens.length === 0) return null;
+    // Return the one used most recently
+    const sorted = [...tokens].sort((a, b) => b.lastUsed - a.lastUsed);
+    return sorted[0].token;
 }
 
 /** Check if any tokens exist yet (first-run detection). */

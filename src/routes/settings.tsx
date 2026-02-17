@@ -47,6 +47,11 @@ function SettingsPage() {
         return localStorage.getItem('rein_auth_token') || '';
     });
 
+    // Derive URLs once at the top
+    const appPort = String(CONFIG.FRONTEND_PORT);
+    const protocol = typeof window !== 'undefined' ? window.location.protocol : 'http:';
+    const shareUrl = ip ? `${protocol}//${ip}:${appPort}/trackpad${authToken ? `?token=${encodeURIComponent(authToken)}` : ''}` : '';
+
     useEffect(() => {
         const defaultIp = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
         setIp(defaultIp);
@@ -57,24 +62,26 @@ function SettingsPage() {
     useEffect(() => {
         if (typeof window === 'undefined') return;
 
-        // If we already have a token, no need to generate
-        const existing = localStorage.getItem('rein_auth_token');
-        if (existing) return;
+        let isMounted = true;
 
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${protocol}//${window.location.host}/ws`;
         const socket = new WebSocket(wsUrl);
 
         socket.onopen = () => {
-            socket.send(JSON.stringify({ type: 'generate-token' }));
+            if (socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'generate-token' }));
+            }
         };
 
         socket.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
                 if (data.type === 'token-generated' && data.token) {
-                    setAuthToken(data.token);
-                    localStorage.setItem('rein_auth_token', data.token);
+                    if (isMounted) {
+                        setAuthToken(data.token);
+                        localStorage.setItem('rein_auth_token', data.token);
+                    }
                     socket.close();
                 }
             } catch (e) {
@@ -83,7 +90,10 @@ function SettingsPage() {
         };
 
         return () => {
-            if (socket.readyState === WebSocket.OPEN) socket.close();
+            isMounted = false;
+            if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+                socket.close();
+            }
         };
     }, []);
 
@@ -105,20 +115,12 @@ function SettingsPage() {
 
     // Generate QR when IP changes or Token changes
     useEffect(() => {
-        if (!ip || typeof window === 'undefined') return;
-        const appPort = String(CONFIG.FRONTEND_PORT);
-        const protocol = window.location.protocol;
-        let shareUrl = `${protocol}//${ip}:${appPort}/trackpad`;
-
-        // Token is embedded in the URL — QR automatically includes it
-        if (authToken) {
-            shareUrl += `?token=${encodeURIComponent(authToken)}`;
-        }
+        if (!ip || typeof window === 'undefined' || !shareUrl) return;
 
         QRCode.toDataURL(shareUrl)
             .then(setQrData)
             .catch((e) => console.error('QR Error:', e));
-    }, [ip, authToken]);
+    }, [ip, authToken, shareUrl]);
 
     // Effect: Auto-detect LAN IP from Server (only if on localhost)
     useEffect(() => {
@@ -149,10 +151,6 @@ function SettingsPage() {
             if (socket.readyState === WebSocket.OPEN) socket.close();
         };
     }, []);
-
-    const displayUrl = typeof window !== 'undefined'
-        ? `${window.location.protocol}//${ip}:${CONFIG.FRONTEND_PORT}/trackpad`
-        : `http://${ip}:${CONFIG.FRONTEND_PORT}/trackpad`;
 
     return (
         <div className="h-full overflow-y-auto w-full">
@@ -317,9 +315,9 @@ function SettingsPage() {
 
                                 <a
                                     className="link link-primary mt-2 break-all text-lg font-mono bg-base-100 px-4 py-2 rounded-lg inline-block max-w-full overflow-hidden text-ellipsis"
-                                    href={displayUrl}
+                                    href={shareUrl}
                                 >
-                                    {ip}:{CONFIG.FRONTEND_PORT}/trackpad
+                                    {shareUrl.replace(`${protocol}//`, '')}
                                 </a>
                             </div>
                         </div>
