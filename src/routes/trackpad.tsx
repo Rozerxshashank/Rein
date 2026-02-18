@@ -19,14 +19,14 @@ function TrackpadPage() {
     const bufferText = buffer.join(" + ");
     const hiddenInputRef = useRef<HTMLInputElement>(null);
     const isComposingRef = useRef(false);
-    
+
     // Load Client Settings
     const [sensitivity] = useState(() => {
         if (typeof window === 'undefined') return 1.0;
         const s = localStorage.getItem('rein_sensitivity');
         return s ? parseFloat(s) : 1.0;
     });
-    
+
     const [invertScroll] = useState(() => {
         if (typeof window === 'undefined') return false;
         const s = localStorage.getItem('rein_invert');
@@ -49,7 +49,7 @@ function TrackpadPage() {
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
         const key = e.key.toLowerCase();
-        
+
         if (modifier !== "Release") {
             if (key === 'backspace') {
                 e.preventDefault();
@@ -68,15 +68,20 @@ function TrackpadPage() {
             }
             return;
         }
-        if (key === 'backspace') send({ type: 'key', key: 'backspace' });
-        else if (key === 'enter') send({ type: 'key', key: 'enter' });
-        else if (key !== 'unidentified' && key.length > 1) {
+        if (key === 'backspace') {
+            send({ type: 'key', key: 'backspace' });
+            if (hiddenInputRef.current) hiddenInputRef.current.value = '';
+        } else if (key === 'enter') {
+            send({ type: 'key', key: 'enter' });
+            if (hiddenInputRef.current) hiddenInputRef.current.value = '';
+        } else if (key !== 'unidentified' && key.length > 1) {
             send({ type: 'key', key });
+            if (hiddenInputRef.current) hiddenInputRef.current.value = '';
         }
     };
 
     const handleModifierState = () => {
-        switch(modifier){
+        switch (modifier) {
             case "Active":
                 if (buffer.length > 0) {
                     setModifier("Hold");
@@ -97,11 +102,12 @@ function TrackpadPage() {
 
     const handleModifier = (key: string) => {
         console.log(`handleModifier called with key: ${key}, current modifier: ${modifier}, buffer:`, buffer);
-        
+
         if (modifier === "Hold") {
             const comboKeys = [...buffer, key];
             console.log(`Sending combo:`, comboKeys);
             sendCombo(comboKeys);
+            if (hiddenInputRef.current) hiddenInputRef.current.value = '';
             return;
         } else if (modifier === "Active") {
             setBuffer(prev => [...prev, key]);
@@ -139,7 +145,7 @@ function TrackpadPage() {
             // Don't send text during modifier mode
             if (modifier !== "Release") {
                 handleModifier(val);
-            }else{
+            } else {
                 sendText(val);
             }
             (e.target as HTMLInputElement).value = '';
