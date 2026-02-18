@@ -42,10 +42,59 @@ function SettingsPage() {
     const [qrData, setQrData] = useState('');
 
     // Load initial state (IP is not stored in localStorage; only sensitivity, invert, theme are client settings)
+    const [authToken, setAuthToken] = useState(() => {
+        if (typeof window === 'undefined') return '';
+        return localStorage.getItem('rein_auth_token') || '';
+    });
+
+    // Derive URLs once at the top
+    const appPort = String(CONFIG.FRONTEND_PORT);
+    const protocol = typeof window !== 'undefined' ? window.location.protocol : 'http:';
+    const shareUrl = ip ? `${protocol}//${ip}:${appPort}/trackpad${authToken ? `?token=${encodeURIComponent(authToken)}` : ''}` : '';
+
     useEffect(() => {
         const defaultIp = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
         setIp(defaultIp);
         setFrontendPort(String(CONFIG.FRONTEND_PORT));
+    }, []);
+
+    // Auto-generate token on settings page load (localhost only)
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        let isMounted = true;
+
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}/ws`;
+        const socket = new WebSocket(wsUrl);
+
+        socket.onopen = () => {
+            if (socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'generate-token' }));
+            }
+        };
+
+        socket.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === 'token-generated' && data.token) {
+                    if (isMounted) {
+                        setAuthToken(data.token);
+                        localStorage.setItem('rein_auth_token', data.token);
+                    }
+                    socket.close();
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        };
+
+        return () => {
+            isMounted = false;
+            if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+                socket.close();
+            }
+        };
     }, []);
 
     // Effect: Update LocalStorage when settings change
@@ -57,35 +106,32 @@ function SettingsPage() {
         localStorage.setItem('rein_invert', JSON.stringify(invertScroll));
     }, [invertScroll]);
 
+    // Effect: Theme
     useEffect(() => {
         if (typeof window === 'undefined') return;
         localStorage.setItem(APP_CONFIG.THEME_STORAGE_KEY, theme);
         document.documentElement.setAttribute('data-theme', theme);
     }, [theme]);
 
-    // Generate QR when IP changes (IP is not persisted to localStorage)
+    // Generate QR when IP changes or Token changes
     useEffect(() => {
-        if (!ip || typeof window === 'undefined') return;
-        const appPort = String(CONFIG.FRONTEND_PORT);
-        const protocol = window.location.protocol;
-        const shareUrl = `${protocol}//${ip}:${appPort}/trackpad`;
+        if (!ip || typeof window === 'undefined' || !shareUrl) return;
+
         QRCode.toDataURL(shareUrl)
             .then(setQrData)
             .catch((e) => console.error('QR Error:', e));
-    }, [ip]);
+    }, [ip, authToken, shareUrl]);
 
     // Effect: Auto-detect LAN IP from Server (only if on localhost)
     useEffect(() => {
         if (typeof window === 'undefined') return;
         if (window.location.hostname !== 'localhost') return;
 
-        console.log('Attempting to auto-detect IP...');
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${protocol}//${window.location.host}/ws`;
         const socket = new WebSocket(wsUrl);
 
         socket.onopen = () => {
-            console.log('Connected to local server for IP detection');
             socket.send(JSON.stringify({ type: 'get-ip' }));
         };
 
@@ -93,7 +139,6 @@ function SettingsPage() {
             try {
                 const data = JSON.parse(event.data);
                 if (data.type === 'server-ip' && data.ip) {
-                    console.log('Auto-detected IP:', data.ip);
                     setIp(data.ip);
                     socket.close();
                 }
@@ -106,10 +151,6 @@ function SettingsPage() {
             if (socket.readyState === WebSocket.OPEN) socket.close();
         };
     }, []);
-
-    const displayUrl = typeof window !== 'undefined'
-        ? `${window.location.protocol}//${ip}:${CONFIG.FRONTEND_PORT}/trackpad`
-        : `http://${ip}:${CONFIG.FRONTEND_PORT}/trackpad`;
 
     return (
         <div className="h-full overflow-y-auto w-full">
@@ -161,6 +202,7 @@ function SettingsPage() {
                                 <span>Slow</span>
                                 <span>Default</span>
                                 <span>Fast</span>
+
                             </div>
                         </div>
 
@@ -273,9 +315,9 @@ function SettingsPage() {
 
                                 <a
                                     className="link link-primary mt-2 break-all text-lg font-mono bg-base-100 px-4 py-2 rounded-lg inline-block max-w-full overflow-hidden text-ellipsis"
-                                    href={displayUrl}
+                                    href={shareUrl}
                                 >
-                                    {ip}:{CONFIG.FRONTEND_PORT}/trackpad
+                                    {shareUrl.replace(`${protocol}//`, '')}
                                 </a>
                             </div>
                         </div>
