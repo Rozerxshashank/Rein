@@ -13,10 +13,13 @@ export const Route = createFileRoute('/trackpad')({
 })
 
 function TrackpadPage() {
-    const [scrollMode, setScrollMode] = useState(false)
-    const [modifier, setModifier] = useState<ModifierState>('Release')
-    const [buffer, setBuffer] = useState<string[]>([])
-    const [keyboardOn, setKeyboardOn] = useState(false)
+    const [scrollMode, setScrollMode] = useState(false);
+    const [modifier, setModifier] = useState<ModifierState>("Release");
+    const [buffer, setBuffer] = useState<string[]>([]);
+    const bufferText = buffer.join(" + ");
+    const hiddenInputRef = useRef<HTMLInputElement>(null);
+    const isComposingRef = useRef(false);
+    const prevCompositionDataRef = useRef('');
 
     const [isMobile, setIsMobile] = useState(
         typeof window !== 'undefined' ? window.innerWidth < 768 : true
@@ -79,8 +82,68 @@ function TrackpadPage() {
         setTimeout(() => send({ type: 'click', button, press: false }), 50)
     }
 
+    const processCompositionDiff = (currentData: string, prevData: string) => {
+        if (currentData === prevData) return;
+
+        // Find common prefix length
+        let commonLen = 0;
+        while (
+            commonLen < prevData.length &&
+            commonLen < currentData.length &&
+            prevData[commonLen] === currentData[commonLen]
+        ) {
+            commonLen++;
+        }
+
+        // Send backspaces for removed/changed characters
+        const deletions = prevData.length - commonLen;
+        for (let i = 0; i < deletions; i++) {
+            send({ type: 'key', key: 'backspace' });
+        }
+
+        // Send new characters individually
+        const newChars = currentData.slice(commonLen);
+        for (const char of newChars) {
+            if (modifier !== "Release") {
+                handleModifier(char);
+            } else {
+                send({ type: 'text', text: char });
+            }
+        }
+    };
+
+    const handleCompositionStart = () => {
+        isComposingRef.current = true;
+        prevCompositionDataRef.current = '';
+    };
+
+    const handleCompositionUpdate = (e: React.CompositionEvent<HTMLInputElement>) => {
+        const currentData = e.data || '';
+        processCompositionDiff(currentData, prevCompositionDataRef.current);
+        prevCompositionDataRef.current = currentData;
+    };
+
+    const handleCompositionEnd = (e: React.CompositionEvent<HTMLInputElement>) => {
+        const currentData = e.data || '';
+        processCompositionDiff(currentData, prevCompositionDataRef.current);
+        prevCompositionDataRef.current = '';
+
+        // Clear input to prevent buffer accumulation
+        if (hiddenInputRef.current) {
+            hiddenInputRef.current.value = '';
+        }
+
+        // Delay flag reset so the onChange firing after compositionend is suppressed
+        setTimeout(() => {
+            isComposingRef.current = false;
+        }, 0);
+    };
+
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        const key = e.key.toLowerCase()
+        // Skip during IME composition — composition handlers manage input
+        if (e.nativeEvent.isComposing || isComposingRef.current) return;
+
+        const key = e.key.toLowerCase();
 
         if (modifier !== 'Release') {
             if (key === 'backspace') {
@@ -139,12 +202,18 @@ function TrackpadPage() {
     }
 
     const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const val = e.target.value
-        if (!val) return
-        e.target.value = ''
-        if (modifier !== 'Release') handleModifier(val)
-        else sendText(val)
-    }
+        if (isComposingRef.current) return; // Skip during IME composition
+        const val = e.target.value;
+        if (val) {
+            e.target.value = '';
+            if (modifier !== "Release") {
+                handleModifier(val);
+            } else {
+                sendText(val);
+            }
+        }
+    };
+
 
     const handleContainerClick = (e: React.MouseEvent) => {
         if (e.currentTarget === e.target && keyboardOn) {
