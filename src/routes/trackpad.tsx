@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRemoteConnection } from '../hooks/useRemoteConnection';
 import { useTrackpadGesture } from '../hooks/useTrackpadGesture';
 import { ControlBar } from '../components/Trackpad/ControlBar';
@@ -16,6 +16,9 @@ function TrackpadPage() {
     const [scrollMode, setScrollMode] = useState(false);
     const [modifier, setModifier] = useState<ModifierState>("Release");
     const [buffer, setBuffer] = useState<string[]>([]);
+    const [keyboardOpen, setKeyboardOpen] = useState(false);
+    const [extraKeysVisible, setExtraKeysVisible] = useState(true);
+
     const bufferText = buffer.join(" + ");
     const hiddenInputRef = useRef<HTMLInputElement>(null);
     const isComposingRef = useRef(false);
@@ -35,8 +38,26 @@ function TrackpadPage() {
     const { status, send, sendCombo } = useRemoteConnection();
     const { isTracking, handlers } = useTrackpadGesture(send, scrollMode, sensitivity, invertScroll);
 
-    const focusInput = () => {
-        hiddenInputRef.current?.focus();
+    // When keyboardOpen changes, focus or blur the hidden input
+    useEffect(() => {
+        if (keyboardOpen) {
+            hiddenInputRef.current?.focus();
+        } else {
+            hiddenInputRef.current?.blur();
+        }
+    }, [keyboardOpen]);
+
+    const toggleKeyboard = () => {
+        setKeyboardOpen(prev => !prev);
+    };
+
+    // Silent focus for ExtraKeys — does NOT open mobile keyboard
+    // ExtraKeys send via callback so they don't actually need input focus,
+    // but keep this in case it's used elsewhere.
+    const focusInputSilent = () => {
+        if (keyboardOpen) {
+            hiddenInputRef.current?.focus();
+        }
     };
 
     const handleClick = (button: 'left' | 'right') => {
@@ -89,7 +110,6 @@ function TrackpadPage() {
             case "Release":
                 setModifier("Active");
                 setBuffer([]);
-                focusInput();
                 break;
         }
     };
@@ -146,20 +166,21 @@ function TrackpadPage() {
             style={{
                 display: "flex",
                 flexDirection: "column",
-                height: "100dvh",
-                width: "100%",
+                position: "fixed",
+                inset: 0,
                 background: "#0d0d0f",
                 overflow: "hidden",
             }}
-            onClick={(e) => {
-                if (e.target === e.currentTarget) {
-                    e.preventDefault();
-                    focusInput();
-                }
-            }}
         >
             {/* TOUCH AREA — takes all remaining space */}
-            <div style={{ flex: 1, position: "relative", borderBottom: "1px solid #2a2d40", minHeight: 0 }}>
+            <div style={{
+                flex: 1,
+                minHeight: 0,
+                position: "relative",
+                display: "flex",
+                flexDirection: "column",
+                borderBottom: "1px solid #2a2d40",
+            }}>
                 <TouchArea
                     isTracking={isTracking}
                     scrollMode={scrollMode}
@@ -185,26 +206,42 @@ function TrackpadPage() {
                     scrollMode={scrollMode}
                     modifier={modifier}
                     buffer={bufferText}
+                    keyboardOpen={keyboardOpen}
+                    extraKeysVisible={extraKeysVisible}
                     onToggleScroll={() => setScrollMode(!scrollMode)}
                     onLeftClick={() => handleClick('left')}
                     onRightClick={() => handleClick('right')}
-                    onKeyboardToggle={focusInput}
+                    onKeyboardToggle={toggleKeyboard}
                     onModifierToggle={handleModifierState}
+                    onExtraKeysToggle={() => setExtraKeysVisible(prev => !prev)}
                 />
             </div>
 
-            {/* EXTRA KEYS — fixed height for 6 rows */}
-            <div style={{ flexShrink: 0, height: "42vh" }}>
+            {/*
+              EXTRA KEYS — collapses when hidden or keyboard is open.
+              Always mounted for smooth height transition.
+            */}
+            {/* EXTRA KEYS */}
+            <div
+                style={{
+                    flexShrink: 0,
+                    maxHeight: (!extraKeysVisible || keyboardOpen) ? "0px" : "50vh",
+                    overflow: "hidden",
+                    transition: "max-height 0.3s ease, opacity 0.2s ease",
+                    opacity: (!extraKeysVisible || keyboardOpen) ? 0 : 1,
+                    pointerEvents: (!extraKeysVisible || keyboardOpen) ? "none" : "auto",
+                }}
+            >
                 <ExtraKeys
                     sendKey={(k) => {
                         if (modifier !== "Release") handleModifier(k);
                         else send({ type: 'key', key: k });
                     }}
-                    onInputFocus={focusInput}
+                    onInputFocus={focusInputSilent}
                 />
             </div>
 
-            {/* HIDDEN INPUT */}
+            {/* HIDDEN INPUT — focused when keyboard is open, works for both mobile (native keyboard) and laptop (physical keyboard) */}
             <input
                 ref={hiddenInputRef}
                 style={{
@@ -219,13 +256,9 @@ function TrackpadPage() {
                 onChange={handleInput}
                 onCompositionStart={handleCompositionStart}
                 onCompositionEnd={handleCompositionEnd}
-                onBlur={() => {
-                    setTimeout(() => hiddenInputRef.current?.focus(), 10);
-                }}
                 autoComplete="off"
                 autoCorrect="off"
                 autoCapitalize="off"
-                autoFocus
             />
         </div>
     );

@@ -12,83 +12,34 @@ interface TouchAreaProps {
 }
 
 export const TouchArea: React.FC<TouchAreaProps> = ({ scrollMode, isTracking, handlers, status }) => {
+    const handleStart = (e: React.TouchEvent) => {
+        handlers.onTouchStart(e);
+    };
+
+    const handlePreventFocus = (e: React.MouseEvent) => {
+        e.preventDefault();
+    };
+
     return (
         <div
-            style={{
-                flex: 1,
-                width: "100%",
-                height: "100%",
-                background: "#0d0d0f",
-                position: "relative",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                touchAction: "none",
-                userSelect: "none",
-                WebkitUserSelect: "none",
-            }}
-            onTouchStart={handlers.onTouchStart}
+            className="bg-neutral-800 relative touch-none select-none flex items-center justify-center p-4"
+            style={{ width: "100%", height: "100%" }}
+            onTouchStart={handleStart}
             onTouchMove={handlers.onTouchMove}
             onTouchEnd={handlers.onTouchEnd}
-            onMouseDown={(e) => e.preventDefault()}
+            onMouseDown={handlePreventFocus}
         >
-            {/* Status strip at very top */}
-            <div style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                right: 0,
-                height: 3,
-                background: status === "connected" ? "#22c55e" : "#ef4444",
-            }} />
+            <div className={`absolute top-0 left-0 w-full h-1 ${status === 'connected' ? 'bg-success' : 'bg-error'}`} />
 
-            {/* Center hint */}
-            <div style={{
-                color: "#ffffff0d",
-                fontSize: 28,
-                fontWeight: 700,
-                letterSpacing: 2,
-                pointerEvents: "none",
-                userSelect: "none",
-            }}>
-                {scrollMode ? "SCROLL" : ""}
+            <div className="text-neutral-600 text-center pointer-events-none">
+                <div className="text-4xl mb-2 opacity-20">
+                    {scrollMode ? 'Scroll Mode' : 'Touch Area'}
+                </div>
             </div>
 
-            {/* Tracking indicator */}
-            {isTracking && (
-                <div style={{
-                    position: "absolute",
-                    bottom: 16,
-                    left: "50%",
-                    transform: "translateX(-50%)",
-                    width: 28,
-                    height: 28,
-                    border: "3px solid #a78bfa",
-                    borderTopColor: "transparent",
-                    borderRadius: "50%",
-                    animation: "spin 0.7s linear infinite",
-                }} />
-            )}
-
-            {/* Scroll badge */}
             {scrollMode && (
-                <div style={{
-                    position: "absolute",
-                    top: 12,
-                    right: 12,
-                    background: "#1e40af",
-                    color: "#93c5fd",
-                    fontSize: 10,
-                    fontWeight: 700,
-                    padding: "2px 8px",
-                    borderRadius: 20,
-                    letterSpacing: 1,
-                }}>
-                    SCROLL
-                </div>
+                <div className="absolute top-4 right-4 badge badge-info">SCROLL Active</div>
             )}
-
-            <style>{`@keyframes spin { to { transform: translateX(-50%) rotate(360deg); } }`}</style>
         </div>
     );
 };

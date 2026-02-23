@@ -10,15 +10,16 @@ interface ControlBarProps {
     onRightClick: () => void;
     onKeyboardToggle: () => void;
     onModifierToggle: () => void;
+    keyboardOpen: boolean;
+    extraKeysVisible: boolean;
+    onExtraKeysToggle: () => void;
 }
-
 
 const CursorIcon = () => (
     <svg width="17" height="17" viewBox="0 0 20 20" fill="currentColor">
         <path d="M3 1 L3 17 L7 13 L10 19 L12.5 18 L9.5 12 L15 12 Z" />
     </svg>
 );
-
 
 const MouseIcon = ({ side }: { side: "L" | "R" }) => (
     <div style={{ display: "flex", alignItems: "center", gap: 3, lineHeight: 1 }}>
@@ -42,6 +43,7 @@ const CopyIcon = () => (
     </svg>
 );
 
+/** Clipboard — Paste */
 const PasteIcon = () => (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -50,6 +52,7 @@ const PasteIcon = () => (
     </svg>
 );
 
+/** Keyboard outline */
 const KeyboardIcon = () => (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
         strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">

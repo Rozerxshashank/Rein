@@ -2,8 +2,7 @@ import React, { useState } from "react";
 import {
     FaVolumeMute, FaVolumeDown, FaVolumeUp, FaPlay, FaPause,
     FaArrowUp, FaArrowDown, FaArrowLeft, FaArrowRight,
-    FaBackspace, FaBackward,
-    FaForward
+    FaBackspace, FaBackward, FaForward
 } from "react-icons/fa";
 import { MdSpaceBar } from "react-icons/md";
 
@@ -20,18 +19,13 @@ export const ExtraKeys: React.FC<ExtraKeysProps> = ({ sendKey }) => {
         setIsPlaying(!isPlaying);
     };
 
-    // 6x6 Grid = 36 Buttons
-    // Designed for "Best" reachability and logical grouping
     const keys = [
-
         { icon: <FaVolumeMute />, key: "audiomute", type: "media", label: "Mute" },
         { icon: <FaVolumeDown />, key: "audiovoldown", type: "media", label: "Vol Down" },
         { icon: <FaVolumeUp />, key: "audiovolup", type: "media", label: "Vol Up" },
         { icon: <FaBackward />, key: "audioback", type: "media", label: "Backward" },
         { icon: isPlaying ? <FaPause /> : <FaPlay />, action: handlePlayPause, type: "media", label: "Play/Pause" },
         { icon: <FaForward />, key: "audioforward", type: "media", label: "Forward" },
-
-
 
         { label: "Esc", key: "escape", type: "action" },
         { label: "Tab", key: "tab", type: "action" },
@@ -40,15 +34,12 @@ export const ExtraKeys: React.FC<ExtraKeysProps> = ({ sendKey }) => {
         { label: "PgUp", key: "pageup", type: "action" },
         { label: "PgDn", key: "pagedown", type: "action" },
 
-
-
         { label: "Meta", key: "meta", type: "mod" },
         { label: "Alt", key: "alt", type: "mod" },
         { icon: <MdSpaceBar />, key: "space", type: "action", label: "Space" },
         { label: "Shift", key: "shift", type: "mod" },
         { icon: <FaArrowUp />, key: "arrowup", type: "arrow", label: "Up" },
         { icon: <FaBackspace />, key: "backspace", type: "action", label: "Backspace" },
-
 
         { label: "Ctrl", key: "control", type: "mod" },
         { label: "Menu", key: "contextmenu", type: "mod" },
@@ -79,17 +70,16 @@ export const ExtraKeys: React.FC<ExtraKeysProps> = ({ sendKey }) => {
             case "fn": return "btn-neutral btn-outline text-xs";
             case "media": return "btn-accent btn-outline";
             case "action": return "btn-neutral";
-            case "nav": return "btn-ghost btn-active";
             default: return "btn-neutral";
         }
     };
 
     return (
-        <div className="grid grid-cols-6 grid-rows-6 gap-1 p-1 w-full h-full bg-base-300">
+        <div className="grid grid-cols-6 grid-rows-6 gap-1 p-1 w-full bg-base-300">
             {keys.map((k, i) => (
                 <button
                     key={i}
-                    className={`btn btn-xs h-full w-full rounded-md shadow-sm ${getBtnClass(k.type)} flex items-center justify-center p-0`}
+                    className={`btn btn-xs h-10 min-h-0 w-full rounded-md shadow-sm ${getBtnClass(k.type)} flex items-center justify-center p-0`}
                     onPointerDown={(e) => {
                         e.preventDefault();
                         if (k.action) k.action();
