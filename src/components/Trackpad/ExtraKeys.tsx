@@ -35,7 +35,7 @@ export const ExtraKeys: React.FC<ExtraKeysProps> = ({ sendKey }) => {
 
         { label: "Esc", key: "escape", type: "action" },
         { label: "Tab", key: "tab", type: "action" },
-        { label: "PtrSc", key: "ptr scr", type: "action" },
+        { label: "PtrSc", key: "printscreen", type: "action" },
         { label: "End", key: "end", type: "action" },
         { label: "PgUp", key: "pageup", type: "action" },
         { label: "PgDn", key: "pagedown", type: "action" },
