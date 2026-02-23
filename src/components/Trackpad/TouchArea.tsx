@@ -22,27 +22,19 @@ export const TouchArea: React.FC<TouchAreaProps> = ({ scrollMode, isTracking, ha
 
     return (
         <div
-            className="bg-neutral-800 relative touch-none select-none flex items-center justify-center p-4"
-            style={{ width: "100%", height: "100%" }}
+            className="flex-1 bg-neutral-800 relative touch-none select-none flex items-center justify-center p-4"
             onTouchStart={handleStart}
             onTouchMove={handlers.onTouchMove}
             onTouchEnd={handlers.onTouchEnd}
             onMouseDown={handlePreventFocus}
         >
-            {/* Status strip at very top */}
-            <div style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                right: 0,
-                height: 3,
-                background: status === "connected" ? "#22c55e" : status === "connecting" ? "#f59e0b" : "#ef4444",
-            }} />
+            <div className={`absolute top-0 left-0 w-full h-1 ${status === 'connected' ? 'bg-success' : 'bg-error'}`} />
 
             <div className="text-neutral-600 text-center pointer-events-none">
                 <div className="text-4xl mb-2 opacity-20">
                     {scrollMode ? 'Scroll Mode' : 'Touch Area'}
                 </div>
+                {isTracking && <div className="loading loading-ring loading-lg"></div>}
             </div>
 
             {scrollMode && (
