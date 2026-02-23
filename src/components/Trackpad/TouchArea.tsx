@@ -39,7 +39,7 @@ export const TouchArea: React.FC<TouchAreaProps> = ({ scrollMode, isTracking, ha
                 left: 0,
                 right: 0,
                 height: 3,
-                background: status === "connected" ? "#22c55e" : "#ef4444",
+                background: status === "connected" ? "#22c55e" : status === "connecting" ? "#f59e0b" : "#ef4444",
             }} />
 
             {/* Center hint */}
