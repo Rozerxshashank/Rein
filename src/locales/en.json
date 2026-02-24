@@ -1,0 +1,17 @@
+{
+    "mirror": {
+        "connecting": "Connecting Mirror...",
+        "unsupported": "Mirroring Unsupported",
+        "unavailable": "Mirroring Unavailable",
+        "stalled": "Stalled",
+        "status_stalled": "⚠ Stalled",
+        "fps_label": "{{fps}} fps",
+        "close_label": "Close mirroring window",
+        "resize_label": "Resize window"
+    },
+    "trackpad": {
+        "scroll_active": "SCROLL ACTIVE",
+        "scroll_mode": "Scroll Mode",
+        "touch_area": "Touch Area"
+    }
+}

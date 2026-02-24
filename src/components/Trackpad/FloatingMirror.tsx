@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-
 import { WSMessage } from '@/hooks/useRemoteConnection';
+import { t } from '@/utils/i18n';
 
 interface FloatingMirrorProps {
     addListener: (l: (msg: WSMessage) => void) => () => void;
@@ -113,7 +113,7 @@ export function FloatingMirror({ addListener, send, onClose }: FloatingMirrorPro
     useEffect(() => {
         const requestFrame = () => send({ type: 'request-frame' });
 
-        const cleanup = addListener((msg: any) => {
+        const cleanup = addListener((msg: WSMessage) => {
             // Store latest cursor position (arrives just before the binary frame)
             if (msg.type === 'cursor-pos') {
                 cursorRef.current = { fx: msg.fx, fy: msg.fy };
@@ -237,7 +237,7 @@ export function FloatingMirror({ addListener, send, onClose }: FloatingMirrorPro
                 {!hasFrame && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black">
                         <div className="w-5 h-5 border-2 border-white/20 border-t-white/80 rounded-full animate-spin" />
-                        <span className="text-[9px] text-white/40 font-mono">Connecting…</span>
+                        <span className="text-[9px] text-white/40 font-mono">{t('mirror.connecting')}</span>
                     </div>
                 )}
             </div>
@@ -245,13 +245,13 @@ export function FloatingMirror({ addListener, send, onClose }: FloatingMirrorPro
             {/* Top bar (close + fps) */}
             <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-2 py-1 bg-gradient-to-b from-black/70 to-transparent pointer-events-none">
                 <span className="text-[9px] font-mono text-white/50">
-                    {stalled ? '⚠ Stalled' : fps > 0 ? `${fps} fps` : '…'}
+                    {stalled ? t('mirror.status_stalled') : fps > 0 ? t('mirror.fps_label', { fps }) : '…'}
                 </span>
                 <button
                     type="button"
                     className="pointer-events-auto w-4 h-4 rounded-full bg-red-500/80 hover:bg-red-400 flex items-center justify-center text-[8px] text-white leading-none"
-                    onPointerDown={(e) => { e.stopPropagation(); onClose(); }}
-                    aria-label="Close mirroring window"
+                    onClick={(e) => { e.stopPropagation(); onClose(); }}
+                    aria-label={t('mirror.close_label')}
                 >
                     ✕
                 </button>
@@ -266,7 +266,7 @@ export function FloatingMirror({ addListener, send, onClose }: FloatingMirrorPro
             >
                 {/* visual grip dots */}
                 <svg width="10" height="10" viewBox="0 0 10 10" className="opacity-50">
-                    <title>Resize window</title>
+                    <title>{t('mirror.resize_label')}</title>
                     <circle cx="8" cy="8" r="1.2" fill="white" />
                     <circle cx="4.5" cy="8" r="1.2" fill="white" />
                     <circle cx="8" cy="4.5" r="1.2" fill="white" />

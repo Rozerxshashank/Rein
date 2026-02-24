@@ -2,16 +2,8 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { WSMessage } from '@/hooks/useRemoteConnection';
+import { t } from '@/utils/i18n';
 
-const MESSAGES = {
-    CONNECTING: 'Connecting Mirror...',
-    UNSUPPORTED: 'Mirroring Unsupported',
-    UNAVAILABLE: 'Mirroring Unavailable',
-    STALLED: 'Stalled',
-    SCROLL_ACTIVE: 'SCROLL ACTIVE',
-    SCROLL_MODE: 'Scroll Mode',
-    TOUCH_AREA: 'Touch Area'
-} as const;
 
 interface TouchAreaProps {
     scrollMode: boolean;
@@ -182,7 +174,7 @@ export const TouchArea: React.FC<TouchAreaProps> = ({
                                 </svg>
                             </div>
                             <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-widest leading-relaxed">
-                                {mirrorError.includes('Wayland') ? MESSAGES.UNSUPPORTED : MESSAGES.UNAVAILABLE}
+                                {mirrorError.includes('Wayland') ? t('mirror.unsupported') : t('mirror.unavailable')}
                             </span>
                             <span className="text-[9px] text-neutral-500 mt-1 max-w-[180px] leading-tight">
                                 {mirrorError}
@@ -191,13 +183,13 @@ export const TouchArea: React.FC<TouchAreaProps> = ({
                     ) : !hasFrame ? (
                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-neutral-900/40">
                             <div className="loading loading-spinner loading-md text-primary"></div>
-                            <span className="text-[10px] uppercase tracking-widest opacity-50 font-bold">{MESSAGES.CONNECTING}</span>
+                            <span className="text-[10px] uppercase tracking-widest opacity-50 font-bold">{t('mirror.connecting')}</span>
                         </div>
                     ) : null}
                     {stalled && hasFrame && !mirrorError && (
                         <div className="absolute top-4 left-4 badge badge-warning gap-2">
                             <span className="w-2 h-2 rounded-full bg-current animate-pulse"></span>
-                            {MESSAGES.STALLED}
+                            {t('mirror.stalled')}
                         </div>
                     )}
                 </div>
@@ -207,13 +199,13 @@ export const TouchArea: React.FC<TouchAreaProps> = ({
 
             <div className={`text-neutral-600 text-center pointer-events-none z-10 ${isMirroring ? 'opacity-0' : 'opacity-100'}`}>
                 <div className="text-4xl mb-2 opacity-20 font-black italic uppercase tracking-tighter">
-                    {scrollMode ? MESSAGES.SCROLL_MODE : MESSAGES.TOUCH_AREA}
+                    {scrollMode ? t('trackpad.scroll_mode') : t('trackpad.touch_area')}
                 </div>
                 {isTracking && <div className="loading loading-ring loading-lg"></div>}
             </div>
 
             {scrollMode && (
-                <div className="absolute top-4 right-4 badge badge-info z-10 font-bold">{MESSAGES.SCROLL_ACTIVE}</div>
+                <div className="absolute top-4 right-4 badge badge-info z-10 font-bold">{t('trackpad.scroll_active')}</div>
             )}
         </div>
     );
