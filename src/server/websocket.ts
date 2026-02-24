@@ -2,7 +2,6 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { InputHandler, InputMessage } from './InputHandler';
 import { storeToken, isKnownToken, touchToken, generateToken, getActiveToken } from './tokenStore';
 import { screen, mouse } from '@nut-tree-fork/nut-js';
-import sharp from 'sharp';
 import os from 'os';
 import fs from 'fs';
 import { IncomingMessage } from 'http';
@@ -218,6 +217,7 @@ export function createWsServer(server: any) {
                         if (!img) throw new Error('GRAB_FAILED');
 
                         const targetW = 640;
+                        const sharp = (await import('sharp')).default;
                         let pipeline = sharp(Buffer.from(img.data), {
                             raw: { width: img.width, height: img.height, channels: 4 },
                         });
