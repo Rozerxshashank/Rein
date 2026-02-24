@@ -1,9 +1,13 @@
 import { WebSocketServer, WebSocket } from 'ws';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import { InputHandler, InputMessage } from './InputHandler';
+const execAsync = promisify(exec);
 import { storeToken, isKnownToken, touchToken, generateToken, getActiveToken } from './tokenStore';
 import { screen, mouse } from '@nut-tree-fork/nut-js';
 import os from 'os';
 import fs from 'fs';
+import path from 'path';
 import { IncomingMessage } from 'http';
 import { Socket } from 'net';
 import logger from '../utils/logger';
@@ -55,6 +59,59 @@ function getLocalIp(): string {
         }
     }
     return 'localhost';
+}
+
+/**
+ * Fallback screen capture for Wayland using common CLI tools.
+ * xdg-desktop-portal/PipeWire is the "correct" but complex path for lone Node.js processes.
+ */
+async function grabWayland(): Promise<Buffer | null> {
+    // 1. Try grim (standard for WLRoots like Sway/Hyprland)
+    try {
+        const { stdout } = await execAsync('grim -', { encoding: 'buffer', timeout: 1500 });
+        if (stdout && stdout.length > 0) return stdout;
+    } catch (e) { /* ignore */ }
+
+    // 2. Try spectacle (KDE's native tool) - captures to file then we read
+    try {
+        const tmpPath = path.join(os.tmpdir(), `rein-cap-kde-${Date.now()}.png`);
+        await execAsync(`spectacle -b -n -o "${tmpPath}"`, { timeout: 2500 });
+        if (fs.existsSync(tmpPath)) {
+            const buffer = fs.readFileSync(tmpPath);
+            fs.unlinkSync(tmpPath);
+            return buffer;
+        }
+    } catch (e) { /* ignore */ }
+
+    // 3. Try gnome-screenshot (standard for GNOME)
+    try {
+        const tmpPath = path.join(os.tmpdir(), `rein-cap-gnome-${Date.now()}.png`);
+        await execAsync(`gnome-screenshot -f "${tmpPath}"`, { timeout: 2500 });
+        if (fs.existsSync(tmpPath)) {
+            const buffer = fs.readFileSync(tmpPath);
+            fs.unlinkSync(tmpPath);
+            return buffer;
+        }
+    } catch (e) { /* ignore */ }
+
+    // 4. Try ksnip (Modern cross-DE Wayland tool)
+    try {
+        const tmpPath = path.join(os.tmpdir(), `rein-cap-ksnip-${Date.now()}.png`);
+        await execAsync(`ksnip -f "${tmpPath}"`, { timeout: 2500 });
+        if (fs.existsSync(tmpPath)) {
+            const buffer = fs.readFileSync(tmpPath);
+            fs.unlinkSync(tmpPath);
+            return buffer;
+        }
+    } catch (e) { /* ignore */ }
+
+    // 5. Try import (ImageMagick - absolute last resort, often works via XWayland mirroring)
+    try {
+        const { stdout } = await execAsync('import -window root png:-', { encoding: 'buffer', timeout: 3000 });
+        if (stdout && stdout.length > 0) return stdout;
+    } catch (e) { /* ignore */ }
+
+    return null;
 }
 
 function isLocalhost(request: IncomingMessage): boolean {
@@ -208,29 +265,49 @@ export function createWsServer(server: any) {
 
                     try {
                         const isWayland = process.env.XDG_SESSION_TYPE === 'wayland' || process.env.WAYLAND_DISPLAY;
+                        let imgData: Buffer | null = null;
+                        let imgWidth = 0;
+                        let imgHeight = 0;
 
                         if (isWayland) {
-                            if (!state.loggedWaylandWarning) {
-                                logger.warn('Screen capture not supported on Wayland via X11');
-                                state.loggedWaylandWarning = true;
+                            imgData = await grabWayland();
+                            if (!imgData) {
+                                if (!state.loggedWaylandWarning) {
+                                    logger.warn('Wayland capture failed. Ensure spectacle, ksnip, grim, or gnome-screenshot is installed.');
+                                    state.loggedWaylandWarning = true;
+                                }
+                                throw new Error('WAYLAND_UNSUPPORTED');
                             }
-                            throw new Error('WAYLAND_UNSUPPORTED');
+                            // sharp will auto-detect width/height from the Buffer
+                        } else {
+                            const img = await Promise.race([
+                                screen.grab(),
+                                new Promise<null>((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 2500))
+                            ]);
+                            if (!img) throw new Error('GRAB_FAILED');
+                            imgData = Buffer.from(img.data);
+                            imgWidth = img.width;
+                            imgHeight = img.height;
                         }
-
-                        const img = await Promise.race([
-                            screen.grab(),
-                            new Promise<null>((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 2500))
-                        ]);
-
-                        if (!img) throw new Error('GRAB_FAILED');
 
                         const targetW = 640;
                         const sharp = await getSharp();
-                        let pipeline = sharp(Buffer.from(img.data), {
-                            raw: { width: img.width, height: img.height, channels: 4 },
-                        });
+                        const sharpOptions = imgWidth > 0 ? {
+                            raw: { width: imgWidth, height: imgHeight, channels: 4 }
+                        } : {};
+
+                        let pipeline = sharp(imgData, sharpOptions);
+
+                        // If we didn't have dimensions (Wayland), extract them from the buffer
+                        // This ensures state and aspect ratio calculations work correctly.
+                        if (imgWidth === 0 || imgHeight === 0) {
+                            const meta = await pipeline.metadata();
+                            imgWidth = meta.width || 0;
+                            imgHeight = meta.height || 0;
+                        }
 
                         // nut-js returns BGRA on Windows. Recombine channels efficiently.
+                        // Wayland/Linux tools usually return PNG/standard formats, so we skip recombination.
                         if (process.platform === 'win32') {
                             pipeline = pipeline.recomb([
                                 [0, 0, 1, 0], // B -> R
@@ -245,8 +322,8 @@ export function createWsServer(server: any) {
                             .jpeg({ quality: 55 })
                             .toBuffer();
 
-                        state.frameW = Math.min(targetW, img.width);
-                        state.frameH = Math.round(state.frameW * (img.height / img.width));
+                        state.frameW = Math.min(targetW, imgWidth);
+                        state.frameH = imgWidth > 0 ? Math.round(state.frameW * (imgHeight / imgWidth)) : 0;
 
                         if (ws.readyState === WebSocket.OPEN) {
                             ws.send(buffer);

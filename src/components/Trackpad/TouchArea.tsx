@@ -175,8 +175,10 @@ export const TouchArea: React.FC<TouchAreaProps> = ({
                             <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-widest leading-relaxed">
                                 {mirrorError.includes('Wayland') ? t('mirror.unsupported') : t('mirror.unavailable')}
                             </span>
-                            <span className="text-[9px] text-neutral-500 mt-1 max-w-[180px] leading-tight">
-                                {mirrorError}
+                            <span className="text-[9px] text-neutral-500 mt-1 max-w-[200px] leading-tight">
+                                {mirrorError === 'WAYLAND_UNSUPPORTED'
+                                    ? "Mirroring failed. Install 'spectacle' (KDE), 'gnome-screenshot' (GNOME), or 'ksnip' (Generic) for Wayland support."
+                                    : mirrorError}
                             </span>
                         </div>
                     ) : !hasFrame ? (

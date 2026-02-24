@@ -1,7 +1,7 @@
 {
     "mirror": {
         "connecting": "Connecting Mirror...",
-        "unsupported": "Mirroring Unsupported",
+        "wayland_unsupported": "Wayland Not Supported",
         "unavailable": "Mirroring Unavailable",
         "stalled": "Stalled",
         "status_stalled": "⚠ Stalled",
@@ -13,5 +13,20 @@
         "scroll_active": "SCROLL ACTIVE",
         "scroll_mode": "Scroll Mode",
         "touch_area": "Touch Area"
+    },
+    "control_bar": {
+        "cursor_mode_title": "Cursor Mode",
+        "scroll_mode_title": "Scroll Mode",
+        "switch_cursor": "Switch to Cursor Mode",
+        "switch_scroll": "Switch to Scroll Mode",
+        "left_click": "Left Click",
+        "right_click": "Right Click",
+        "paste_label": "Paste from Clipboard (Not implemented)",
+        "paste_title": "Paste (Not implemented)",
+        "toggle_keyboard": "Toggle Keyboard",
+        "keyboard_title": "Keyboard",
+        "toggle_hold": "Toggle Modifier Hold",
+        "hold_title": "Modifier Hold",
+        "hold_label": "HOLD"
     }
 }
