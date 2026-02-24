@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { WSInboundMessage, WSOutboundMessage } from '@/hooks/useRemoteConnection';
+import type { WSInboundMessage, WSOutboundMessage } from '@/hooks/useRemoteConnection';
 import { t } from '@/utils/i18n';
 
 

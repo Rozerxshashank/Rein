@@ -1,10 +1,11 @@
+'use client';
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { WSMessage } from '@/hooks/useRemoteConnection';
+import type { WSInboundMessage, WSOutboundMessage } from '@/hooks/useRemoteConnection';
 import { t } from '@/utils/i18n';
 
 interface FloatingMirrorProps {
-    addListener: (l: (msg: WSMessage) => void) => () => void;
-    send: (msg: WSMessage) => void;
+    addListener: (l: (msg: WSInboundMessage) => void) => () => void;
+    send: (msg: WSOutboundMessage) => void;
     onClose: () => void;
 }
 
@@ -42,24 +43,24 @@ export function FloatingMirror({ addListener, send, onClose }: FloatingMirrorPro
     const onDragStart = useCallback((e: React.TouchEvent) => {
         // Only handle if not resizing (resize uses 2nd touch)
         if (e.touches.length !== 1) return;
-        const t = e.touches[0];
+        const touch = e.touches[0];
         dragStart.current = {
-            touchId: t.identifier,
-            ox: t.clientX - posRef.current.x,
-            oy: t.clientY - posRef.current.y,
+            touchId: touch.identifier,
+            ox: touch.clientX - posRef.current.x,
+            oy: touch.clientY - posRef.current.y,
         };
         e.stopPropagation();
     }, []); // No more pos dependency
 
     const onDragMove = useCallback((e: React.TouchEvent) => {
         if (!dragStart.current || e.touches.length !== 1) return;
-        const t = Array.from(e.touches).find(t => t.identifier === dragStart.current!.touchId);
-        if (!t) return;
+        const touch = Array.from(e.touches).find(t => t.identifier === dragStart.current!.touchId);
+        if (!touch) return;
 
         const vw = window.innerWidth;
         const vh = window.innerHeight;
-        const newX = Math.max(0, Math.min(vw - size.w, t.clientX - dragStart.current.ox));
-        const newY = Math.max(0, Math.min(vh - size.h, t.clientY - dragStart.current.oy));
+        const newX = Math.max(0, Math.min(vw - size.w, touch.clientX - dragStart.current.ox));
+        const newY = Math.max(0, Math.min(vh - size.h, touch.clientY - dragStart.current.oy));
 
         setPos({ x: newX, y: newY });
         e.stopPropagation();
@@ -75,11 +76,11 @@ export function FloatingMirror({ addListener, send, onClose }: FloatingMirrorPro
     const resizeStart = useRef<{ touchId: number; startX: number; startY: number; startW: number; startH: number } | null>(null);
 
     const onResizeStart = useCallback((e: React.TouchEvent) => {
-        const t = e.touches[0];
+        const touch = e.touches[0];
         resizeStart.current = {
-            touchId: t.identifier,
-            startX: t.clientX,
-            startY: t.clientY,
+            touchId: touch.identifier,
+            startX: touch.clientX,
+            startY: touch.clientY,
             startW: size.w,
             startH: size.h,
         };
@@ -89,11 +90,11 @@ export function FloatingMirror({ addListener, send, onClose }: FloatingMirrorPro
 
     const onResizeMove = useCallback((e: React.TouchEvent) => {
         if (!resizeStart.current) return;
-        const t = Array.from(e.touches).find(t => t.identifier === resizeStart.current!.touchId);
-        if (!t) return;
+        const touch = Array.from(e.touches).find(t => t.identifier === resizeStart.current!.touchId);
+        if (!touch) return;
 
-        const dx = t.clientX - resizeStart.current.startX;
-        const dy = t.clientY - resizeStart.current.startY;
+        const dx = touch.clientX - resizeStart.current.startX;
+        const dy = touch.clientY - resizeStart.current.startY;
 
         const newW = Math.max(MIN_W, resizeStart.current.startW + dx);
         const newH = Math.max(MIN_H, resizeStart.current.startH + dy);
@@ -113,7 +114,7 @@ export function FloatingMirror({ addListener, send, onClose }: FloatingMirrorPro
     useEffect(() => {
         const requestFrame = () => send({ type: 'request-frame' });
 
-        const cleanup = addListener((msg: WSMessage) => {
+        const cleanup = addListener((msg: WSInboundMessage) => {
             // Store latest cursor position (arrives just before the binary frame)
             if (msg.type === 'cursor-pos') {
                 cursorRef.current = { fx: msg.fx, fy: msg.fy };
