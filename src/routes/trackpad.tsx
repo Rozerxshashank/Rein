@@ -1,10 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useState, useRef, useEffect } from 'react'
 import { useRemoteConnection } from '@/hooks/useRemoteConnection';
+// TODO: FloatingMirror is currently preserved as an alternative to integrated mirroring.
+// It could be moved to a toggleable 'PIP Mode' in the future.
 import { useTrackpadGesture } from '@/hooks/useTrackpadGesture';
 import { ControlBar } from '@/components/Trackpad/ControlBar';
 import { ExtraKeys } from '@/components/Trackpad/ExtraKeys';
 import { TouchArea } from '@/components/Trackpad/TouchArea';
+
 import { BufferBar } from '@/components/Trackpad/Buffer';
 import { ModifierState } from '@/types';
 
@@ -18,7 +21,7 @@ function TrackpadPage() {
     const [buffer, setBuffer] = useState<string[]>([]);
     const [keyboardOpen, setKeyboardOpen] = useState(false);
     const [extraKeysVisible, setExtraKeysVisible] = useState(true);
-
+    const [isMirroring] = useState(true);
     const bufferText = buffer.join(" + ");
     const hiddenInputRef = useRef<HTMLInputElement>(null);
     const isComposingRef = useRef(false);
@@ -35,7 +38,8 @@ function TrackpadPage() {
         return s ? JSON.parse(s) : false;
     });
 
-    const { status, send, sendCombo } = useRemoteConnection();
+    const { status, send, sendCombo, addListener } = useRemoteConnection();
+    // Pass sensitivity and invertScroll to the gesture hook
     const { isTracking, handlers } = useTrackpadGesture(send, scrollMode, sensitivity, invertScroll);
 
     // When keyboardOpen changes, focus or blur the hidden input
@@ -171,10 +175,13 @@ function TrackpadPage() {
                     scrollMode={scrollMode}
                     handlers={handlers}
                     status={status}
+                    isMirroring={isMirroring}
+                    send={send}
+                    addListener={addListener}
                 />
 
                 {bufferText && (
-                    <div className="absolute bottom-4 left-0 right-0 px-4">
+                    <div className="absolute bottom-4 left-0 right-0 px-4 z-20">
                         <BufferBar bufferText={bufferText} />
                     </div>
                 )}
@@ -201,9 +208,9 @@ function TrackpadPage() {
             <div
                 className={`shrink-0 overflow-hidden transition-all duration-300
                 ${(!extraKeysVisible || keyboardOpen)
-                    ? "max-h-0 opacity-0 pointer-events-none"
-                    : "max-h-[50vh] opacity-100"
-                }`}
+                        ? "max-h-0 opacity-0 pointer-events-none"
+                        : "max-h-[50vh] opacity-100"
+                    }`}
             >
                 <ExtraKeys
                     sendKey={(k) => {
