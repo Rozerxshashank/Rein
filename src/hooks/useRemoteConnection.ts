@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 export const useRemoteConnection = () => {
     const wsRef = useRef<WebSocket | null>(null);
     const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
+    const [platform, setPlatform] = useState<string | null>(null);
 
     useEffect(() => {
         let isMounted = true;
@@ -45,9 +46,22 @@ export const useRemoteConnection = () => {
             socket.onopen = () => {
                 if (isMounted) setStatus('connected');
             };
+
+            socket.onmessage = (event) => {
+                if (!isMounted || typeof event.data !== 'string') return;
+                try {
+                    const msg = JSON.parse(event.data);
+                    if (msg.type === 'connected') {
+                        setPlatform(msg.platform);
+                    }
+                } catch (e) {
+                    // Ignore non-json or binary messages handled by other hooks
+                }
+            };
             socket.onclose = () => {
                 if (isMounted) {
                     setStatus('disconnected');
+                    setPlatform(null);
                     reconnectTimer = setTimeout(connect, 3000);
                 }
             };
@@ -92,5 +106,5 @@ export const useRemoteConnection = () => {
         }
     }, []);
 
-    return { status, send, sendCombo };
+    return { status, platform, send, sendCombo, wsRef };
 };

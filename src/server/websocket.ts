@@ -91,8 +91,29 @@ export function createWsServer(server: any) {
         let lastTime = 0;
         const DUPLICATE_WINDOW_MS = 100;
 
-        ws.on('message', async (data: WebSocket.RawData) => {
+        const startMirror = () => {
+            (ws as any).isConsumer = true;
+            logger.info('Client registered as Screen Consumer');
+        };
+
+        const stopMirror = () => {
+            (ws as any).isConsumer = false;
+            logger.info('Client unregistered as Screen Consumer');
+        };
+
+        ws.on('message', async (data: WebSocket.RawData, isBinary: boolean) => {
             try {
+                if (isBinary) {
+                    // Relay frames from Providers to Consumers
+                    if ((ws as any).isProvider) {
+                        wss.clients.forEach(client => {
+                            if (client !== ws && (client as any).isConsumer && client.readyState === WebSocket.OPEN) {
+                                client.send(data, { binary: true });
+                            }
+                        });
+                    }
+                    return;
+                }
                 const raw = data.toString();
                 const now = Date.now();
 
@@ -141,6 +162,22 @@ export function createWsServer(server: any) {
                     }
 
                     ws.send(JSON.stringify({ type: 'token-generated', token: tokenToReturn }));
+                    return;
+                }
+
+                if (msg.type === 'start-mirror') {
+                    startMirror();
+                    return;
+                }
+
+                if (msg.type === 'stop-mirror') {
+                    stopMirror();
+                    return;
+                }
+
+                if (msg.type === 'start-provider') {
+                    (ws as any).isProvider = true;
+                    logger.info('Client registered as Screen Provider');
                     return;
                 }
 
@@ -203,7 +240,8 @@ export function createWsServer(server: any) {
             }
         });
 
-        ws.on('close', () => {  
+        ws.on('close', () => {
+            stopMirror();
             logger.info('Client disconnected');
         });
 

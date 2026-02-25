@@ -4,7 +4,7 @@ import { useRemoteConnection } from '../hooks/useRemoteConnection';
 import { useTrackpadGesture } from '../hooks/useTrackpadGesture';
 import { ControlBar } from '../components/Trackpad/ControlBar';
 import { ExtraKeys } from '../components/Trackpad/ExtraKeys';
-import { TouchArea } from '../components/Trackpad/TouchArea';
+import { ScreenMirror } from '../components/Trackpad/ScreenMirror';
 import { BufferBar } from '@/components/Trackpad/Buffer';
 import { ModifierState } from '@/types';
 
@@ -34,7 +34,7 @@ function TrackpadPage() {
         return s ? JSON.parse(s) : false;
     });
 
-    const { status, send, sendCombo } = useRemoteConnection();
+    const { status, send, sendCombo, wsRef } = useRemoteConnection();
     // Pass sensitivity and invertScroll to the gesture hook
     const { isTracking, handlers } = useTrackpadGesture(send, scrollMode, sensitivity, invertScroll);
 
@@ -202,12 +202,13 @@ function TrackpadPage() {
             className="flex flex-col h-full overflow-hidden"
             onClick={handleContainerClick}
         >
-            {/* Touch Surface */}
-            <TouchArea
+            {/* Screen Mirror Surface */}
+            <ScreenMirror
                 isTracking={isTracking}
                 scrollMode={scrollMode}
                 handlers={handlers}
                 status={status}
+                wsRef={wsRef}
             />
             {bufferText !== "" && <BufferBar bufferText={bufferText} />}
 
