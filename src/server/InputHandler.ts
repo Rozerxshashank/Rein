@@ -196,7 +196,12 @@ export class InputHandler {
 					const nutKey = KEY_MAP[msg.key.toLowerCase()]
 
 					if (nutKey !== undefined) {
-						await keyboard.type(nutKey)
+						await keyboard.pressKey(nutKey)
+						await keyboard.releaseKey(nutKey)
+					} else if (msg.key === " " || msg.key?.toLowerCase() === "space") {
+						const spaceKey = KEY_MAP.space
+						await keyboard.pressKey(spaceKey)
+						await keyboard.releaseKey(spaceKey)
 					} else if (msg.key.length === 1) {
 						await keyboard.type(msg.key)
 					} else {
