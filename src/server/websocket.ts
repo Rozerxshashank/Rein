@@ -33,8 +33,21 @@ function isLocalhost(request: IncomingMessage): boolean {
 
 // server: any is used to support Vite's dynamic httpServer types (http, https, http2)
 export function createWsServer(server: unknown) {
+	const configPath = "./src/server-config.json"
+	const serverConfig = fs.existsSync(configPath)
+		? (JSON.parse(fs.readFileSync(configPath, "utf-8")) as Record<
+				string,
+				unknown
+			>)
+		: {}
+	const inputThrottleMs =
+		typeof serverConfig.inputThrottleMs === "number" &&
+		serverConfig.inputThrottleMs > 0
+			? serverConfig.inputThrottleMs
+			: 8
+
 	const wss = new WebSocketServer({ noServer: true })
-	const inputHandler = new InputHandler()
+	const inputHandler = new InputHandler(inputThrottleMs)
 	const LAN_IP = getLocalIp()
 	const MAX_PAYLOAD_SIZE = 10 * 1024 // 10KB limit
 
@@ -106,7 +119,7 @@ export function createWsServer(server: unknown) {
 
 			let lastRaw = ""
 			let lastTime = 0
-			const DUPLICATE_WINDOW_MS = 8
+			const DUPLICATE_WINDOW_MS = inputThrottleMs
 			let lastTokenTouch = 0
 
 			ws.on("message", async (data: WebSocket.RawData) => {
@@ -187,7 +200,12 @@ export function createWsServer(server: unknown) {
 								return
 							}
 
-							const SERVER_CONFIG_KEYS = ["host", "frontendPort", "address"]
+							const SERVER_CONFIG_KEYS = [
+								"host",
+								"frontendPort",
+								"address",
+								"inputThrottleMs",
+							]
 							const filtered: Record<string, unknown> = {}
 
 							for (const key of SERVER_CONFIG_KEYS) {
@@ -211,6 +229,24 @@ export function createWsServer(server: unknown) {
 										return
 									}
 									filtered[key] = port
+								} else if (key === "inputThrottleMs") {
+									const ms = Number(msg.config[key])
+									if (
+										!Number.isFinite(ms) ||
+										ms < 1 ||
+										ms > 1000 ||
+										Math.floor(ms) !== ms
+									) {
+										ws.send(
+											JSON.stringify({
+												type: "config-updated",
+												success: false,
+												error: "Invalid inputThrottleMs (must be 1–1000)",
+											}),
+										)
+										return
+									}
+									filtered[key] = ms
 								} else if (
 									typeof msg.config[key] === "string" &&
 									msg.config[key].length <= 255
@@ -269,7 +305,8 @@ export function createWsServer(server: unknown) {
 					await inputHandler.handleMessage(msg as InputMessage)
 				} catch (err: unknown) {
 					logger.error(
-						`Error processing message: ${err instanceof Error ? err.message : String(err)
+						`Error processing message: ${
+							err instanceof Error ? err.message : String(err)
 						}`,
 					)
 				}
