@@ -133,6 +133,9 @@ export function createWsServer(server: any) {
                 }
 
                 const msg = JSON.parse(raw);
+                if (msg.type !== 'get-ip' && msg.type !== 'ping') {
+                    logger.info(`Msg: ${msg.type} from ${request.socket.remoteAddress}`);
+                }
 
                 // PERFORMANCE: Only touch if it's an actual command (not ping/ip)
                 if (token && msg.type !== 'get-ip' && msg.type !== 'generate-token') {

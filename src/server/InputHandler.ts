@@ -1,5 +1,6 @@
 import { mouse, Point, Button, keyboard, Key } from '@nut-tree-fork/nut-js';
 import { KEY_MAP } from './KeyMap';
+import logger from '../utils/logger';
 
 export interface InputMessage {
     type: 'move' | 'click' | 'scroll' | 'key' | 'text' | 'zoom' | 'combo';
@@ -67,8 +68,8 @@ export class InputHandler {
                             const pending = this.pendingMove;
                             this.pendingMove = null;
                             this.handleMessage(pending).catch((err) => {
-                                 console.error('Error processing pending move event:', err);
-                             });
+                                console.error('Error processing pending move event:', err);
+                            });
                         }
                     }, 8);
                 }
@@ -86,8 +87,8 @@ export class InputHandler {
                             const pending = this.pendingScroll;
                             this.pendingScroll = null;
                             this.handleMessage(pending).catch((err) => {
-                                 console.error('Error processing pending move event:', err);
-                             });
+                                console.error('Error processing pending move event:', err);
+                            });
                         }
                     }, 8);
                 }
@@ -120,8 +121,8 @@ export class InputHandler {
                         msg.button === 'left'
                             ? Button.LEFT
                             : msg.button === 'right'
-                            ? Button.RIGHT
-                            : Button.MIDDLE;
+                                ? Button.RIGHT
+                                : Button.MIDDLE;
 
                     if (msg.press) {
                         await mouse.pressButton(btn);
@@ -193,7 +194,7 @@ export class InputHandler {
 
             case 'key':
                 if (msg.key && typeof msg.key === 'string' && msg.key.length <= 50) {
-                    console.log(`Processing key: ${msg.key}`);
+                    logger.info(`Processing key: ${msg.key}`);
                     const nutKey = KEY_MAP[msg.key.toLowerCase()];
 
                     if (nutKey !== undefined) {
@@ -201,7 +202,7 @@ export class InputHandler {
                     } else if (msg.key.length === 1) {
                         await keyboard.type(msg.key);
                     } else {
-                        console.log(`Unmapped key: ${msg.key}`);
+                        logger.info(`Unmapped key: ${msg.key}`);
                     }
                 }
                 break;
@@ -224,11 +225,11 @@ export class InputHandler {
                     }
 
                     if (nutKeys.length === 0) {
-                        console.error('No valid keys in combo');
+                        logger.error('No valid keys in combo');
                         return;
                     }
 
-                    console.log(`Pressing keys:`, nutKeys);
+                    logger.info(`Pressing keys: ${nutKeys.join(', ')}`);
                     const pressedKeys: Key[] = [];
 
                     try {
@@ -250,7 +251,7 @@ export class InputHandler {
                         }
                     }
 
-                    console.log(`Combo complete: ${msg.keys.join('+')}`);
+                    logger.info(`Combo complete: ${msg.keys.join('+')}`);
                 }
                 break;
 

@@ -12,12 +12,16 @@ export function useMirrorStream(
     const [hasFrame, setHasFrame] = useState(false);
     const frameRef = useRef<ImageBitmap | null>(null);
     const rAFRef = useRef<number | null>(null);
+    const isDecoding = useRef(false);
 
     const renderFrame = useCallback(() => {
         if (!canvasRef.current || !frameRef.current) return;
 
         const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d', { alpha: false });
+        const ctx = canvas.getContext('2d', {
+            alpha: false,
+            desynchronized: true
+        });
         if (!ctx) return;
 
         // Only resize if dimensions changed
@@ -34,9 +38,15 @@ export function useMirrorStream(
         // Only process binary blob data (frames)
         if (!(event.data instanceof Blob)) return;
 
+        // If we are already decoding a frame, skip this one to avoid buildup.
+        // The sender already has backpressure, but this helps if CPU decoding is slow.
+        if (isDecoding.current) return;
+
         try {
+            isDecoding.current = true;
             // zero-copy background thread decoding
             const bitmap = await createImageBitmap(event.data);
+            isDecoding.current = false;
 
             if (frameRef.current) {
                 frameRef.current.close();
@@ -48,6 +58,7 @@ export function useMirrorStream(
                 rAFRef.current = requestAnimationFrame(renderFrame);
             }
         } catch (e) {
+            isDecoding.current = false;
             console.error('Bitmap decoding error:', e);
         }
     }, [renderFrame]);
