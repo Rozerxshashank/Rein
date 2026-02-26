@@ -122,23 +122,12 @@ export function createWsServer(server: unknown) {
 
 			ws.send(JSON.stringify({ type: "connected", serverIp: LAN_IP }))
 
-			let lastRaw = ""
-			let lastTime = 0
-			let duplicateWindowMs = inputThrottleMs
 			let lastTokenTouch = 0
 
 			ws.on("message", async (data: WebSocket.RawData) => {
 				try {
 					const raw = data.toString()
 					const now = Date.now()
-
-					// Prevent rapid identical message spam
-					if (raw === lastRaw && now - lastTime < duplicateWindowMs) {
-						return
-					}
-
-					lastRaw = raw
-					lastTime = now
 
 					if (raw.length > MAX_PAYLOAD_SIZE) {
 						logger.warn("Payload too large, rejecting message.")
@@ -236,12 +225,7 @@ export function createWsServer(server: unknown) {
 									filtered[key] = port
 								} else if (key === "inputThrottleMs") {
 									const ms = Number(msg.config[key])
-									if (
-										!Number.isFinite(ms) ||
-										ms < 1 ||
-										ms > 1000 ||
-										Math.floor(ms) !== ms
-									) {
+									if (!Number.isFinite(ms) || ms < 1 || ms > 1000) {
 										ws.send(
 											JSON.stringify({
 												type: "config-updated",
@@ -281,7 +265,6 @@ export function createWsServer(server: unknown) {
 							// Propagate inputThrottleMs immediately to live subsystems
 							if (typeof filtered.inputThrottleMs === "number") {
 								inputHandler.setThrottleMs(filtered.inputThrottleMs)
-								duplicateWindowMs = filtered.inputThrottleMs
 							}
 
 							logger.info("Server configuration updated")
