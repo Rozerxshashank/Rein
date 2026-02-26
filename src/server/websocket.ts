@@ -34,12 +34,17 @@ function isLocalhost(request: IncomingMessage): boolean {
 // server: any is used to support Vite's dynamic httpServer types (http, https, http2)
 export function createWsServer(server: unknown) {
 	const configPath = "./src/server-config.json"
-	const serverConfig = fs.existsSync(configPath)
-		? (JSON.parse(fs.readFileSync(configPath, "utf-8")) as Record<
+	let serverConfig: Record<string, unknown> = {}
+	if (fs.existsSync(configPath)) {
+		try {
+			serverConfig = JSON.parse(fs.readFileSync(configPath, "utf-8")) as Record<
 				string,
 				unknown
-			>)
-		: {}
+			>
+		} catch (e) {
+			logger.warn(`Invalid server-config.json, using defaults: ${String(e)}`)
+		}
+	}
 	const inputThrottleMs =
 		typeof serverConfig.inputThrottleMs === "number" &&
 		serverConfig.inputThrottleMs > 0
