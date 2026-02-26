@@ -35,7 +35,6 @@ function TrackpadPage() {
 	})
 
 	const { status, send, sendCombo, wsRef } = useRemoteConnection()
-
 	// Pass sensitivity and invertScroll to the gesture hook
 	const { isTracking, handlers } = useTrackpadGesture(
 		send,
@@ -100,7 +99,8 @@ function TrackpadPage() {
 	const handleCompositionEnd = (
 		e: React.CompositionEvent<HTMLInputElement>,
 	) => {
-		const currentData = e.data || ""
+		// Fallback to target value if data is empty (some mobile browsers)
+		const currentData = e.data || e.currentTarget.value || ""
 		processCompositionDiff(currentData, prevCompositionDataRef.current)
 		prevCompositionDataRef.current = ""
 
@@ -139,9 +139,14 @@ function TrackpadPage() {
 			}
 			return
 		}
-		if (key === "backspace") send({ type: "key", key: "backspace" })
-		else if (key === "enter") send({ type: "key", key: "enter" })
-		else if (key !== "unidentified" && key.length > 1) {
+
+		if (key === "backspace") {
+			e.preventDefault()
+			send({ type: "key", key: "backspace" })
+		} else if (key === "enter") {
+			e.preventDefault()
+			send({ type: "key", key: "enter" })
+		} else if (key !== "unidentified" && key.length > 1) {
 			send({ type: "key", key })
 		}
 	}
@@ -226,7 +231,6 @@ function TrackpadPage() {
 				modifier={modifier}
 				buffer={buffer.join(" + ")}
 				onToggleScroll={() => setScrollMode(!scrollMode)}
-				onLeftClick={() => handleClick("left")}
 				onRightClick={() => handleClick("right")}
 				onKeyboardToggle={focusInput}
 				onModifierToggle={handleModifierState}

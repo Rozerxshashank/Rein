@@ -68,7 +68,7 @@ export class InputHandler {
 							const pending = this.pendingMove
 							this.pendingMove = null
 							this.handleMessage(pending).catch((err) => {
-								logger.error(`Error processing pending move event: ${err}`)
+								logger.error("Error processing pending move event: %O", err)
 							})
 						}
 					}, 8)
@@ -87,7 +87,7 @@ export class InputHandler {
 							const pending = this.pendingScroll
 							this.pendingScroll = null
 							this.handleMessage(pending).catch((err) => {
-								logger.error(`Error processing pending move event: ${err}`)
+								logger.error("Error processing pending move event: %O", err)
 							})
 						}
 					}, 8)

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import type { InputMessage } from "../server/InputHandler"
 
 export const useRemoteConnection = () => {
 	const wsRef = useRef<WebSocket | null>(null)
@@ -93,7 +94,7 @@ export const useRemoteConnection = () => {
 		}
 	}, [])
 
-	const send = useCallback((msg: unknown) => {
+	const send = useCallback((msg: InputMessage) => {
 		if (wsRef.current?.readyState === WebSocket.OPEN) {
 			wsRef.current.send(JSON.stringify(msg))
 		}

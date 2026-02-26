@@ -26,7 +26,10 @@ export const TouchArea: React.FC<TouchAreaProps> = ({
 	}
 
 	return (
+		// biome-ignore lint/a11y/useSemanticElements: layout container intentionally not a button
 		<div
+			role="button"
+			tabIndex={0}
 			className="flex-1 bg-neutral-800 relative touch-none select-none flex items-center justify-center p-4"
 			onTouchStart={handleStart}
 			onTouchMove={handlers.onTouchMove}

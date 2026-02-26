@@ -61,9 +61,12 @@ function SettingsPage() {
 		: ""
 
 	useEffect(() => {
-		const defaultIp =
+		const defaultHostname =
 			typeof window !== "undefined" ? window.location.hostname : "localhost"
-		setIp(defaultIp)
+
+		// If we are on localhost/127.0.0.1, we'll try to get the LAN IP from the server
+		// otherwise we stick with what the browser sees (remote access)
+		setIp(defaultHostname)
 		setFrontendPort(String(CONFIG.FRONTEND_PORT))
 	}, [])
 
@@ -137,7 +140,8 @@ function SettingsPage() {
 	// Effect: Auto-detect LAN IP from Server (only if on localhost)
 	useEffect(() => {
 		if (typeof window === "undefined") return
-		if (window.location.hostname !== "localhost") return
+		const hostname = window.location.hostname
+		if (hostname !== "localhost" && hostname !== "127.0.0.1") return
 
 		const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
 		const wsUrl = `${protocol}//${window.location.host}/ws`
@@ -203,27 +207,22 @@ function SettingsPage() {
 						</div>
 
 						<div className="form-control w-full">
-							<label
-								className="label cursor-pointer"
-								htmlFor="invert-scroll-toggle"
-							>
+							<label className="label cursor-pointer">
 								<span className="label-text font-medium">Invert Scroll</span>
 								<input
-									id="invert-scroll-toggle"
 									type="checkbox"
 									className="toggle toggle-primary"
 									checked={invertScroll}
 									onChange={(e) => setInvertScroll(e.target.checked)}
 								/>
 							</label>
-
-							<label className="label" htmlFor="invert-scroll-toggle">
+							<div className="label">
 								<span className="label-text-alt opacity-50">
 									{invertScroll
 										? "Traditional scrolling enabled"
 										: "Natural scrolling"}
 								</span>
-							</label>
+							</div>
 						</div>
 
 						<div className="form-control w-full">
@@ -249,7 +248,6 @@ function SettingsPage() {
 							<label className="label mb-3" htmlFor="server-ip-input">
 								<span className="label-text">Server IP (for Remote)</span>
 							</label>
-
 							<input
 								id="server-ip-input"
 								type="text"
@@ -258,12 +256,11 @@ function SettingsPage() {
 								value={ip}
 								onChange={(e) => setIp(e.target.value)}
 							/>
-
-							<label className="label" htmlFor="server-ip-input">
+							<div className="label">
 								<span className="label-text-alt opacity-50">
 									This Computer's LAN IP
 								</span>
-							</label>
+							</div>
 						</div>
 
 						<div className="form-control w-full">

@@ -4,7 +4,7 @@ import { writeFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-export interface TokenEntry {
+interface TokenEntry {
 	token: string
 	createdAt: number
 	lastUsed: number
@@ -26,12 +26,9 @@ function validateTokens(data: unknown): TokenEntry[] {
 		(t): t is TokenEntry =>
 			t !== null &&
 			typeof t === "object" &&
-			"token" in t &&
-			typeof t.token === "string" &&
-			"lastUsed" in t &&
-			typeof t.lastUsed === "number" &&
-			"createdAt" in t &&
-			typeof t.createdAt === "number",
+			typeof (t as Record<string, unknown>).token === "string" &&
+			typeof (t as Record<string, unknown>).lastUsed === "number" &&
+			typeof (t as Record<string, unknown>).createdAt === "number",
 	)
 }
 

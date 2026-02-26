@@ -1,5 +1,7 @@
 import fs from "node:fs"
-import type { IncomingMessage } from "node:http"
+import type { IncomingMessage, Server } from "node:http"
+import type { Http2Server } from "node:http2"
+import type { Server as HttpsServer } from "node:https"
 import type { Socket } from "node:net"
 import os from "node:os"
 import { WebSocket, WebSocketServer } from "ws"
@@ -12,6 +14,11 @@ import {
 	storeToken,
 	touchToken,
 } from "./tokenStore"
+
+interface ExtWebSocket extends WebSocket {
+	isConsumer?: boolean
+	isProvider?: boolean
+}
 
 function getLocalIp(): string {
 	const nets = os.networkInterfaces()
@@ -33,14 +40,8 @@ function isLocalhost(request: IncomingMessage): boolean {
 	return addr === "127.0.0.1" || addr === "::1" || addr === "::ffff:127.0.0.1"
 }
 
-interface ReinWebSocket extends WebSocket {
-	isConsumer?: boolean
-	isProvider?: boolean
-}
-
-// server: any is used to support Vite's dynamic httpServer types (http, https, http2)
-// biome-ignore lint/suspicious/noExplicitAny: Vite's server type is dynamic
-export function createWsServer(server: any) {
+// supports Vite's dynamic httpServer types (http, https, http2)
+export function createWsServer(server: Server | HttpsServer | Http2Server) {
 	const wss = new WebSocketServer({ noServer: true })
 	const inputHandler = new InputHandler()
 	const LAN_IP = getLocalIp()
@@ -117,12 +118,12 @@ export function createWsServer(server: any) {
 			const DUPLICATE_WINDOW_MS = 100
 
 			const startMirror = () => {
-				;(ws as ReinWebSocket).isConsumer = true
+				;(ws as ExtWebSocket).isConsumer = true
 				logger.info("Client registered as Screen Consumer")
 			}
 
 			const stopMirror = () => {
-				;(ws as ReinWebSocket).isConsumer = false
+				;(ws as ExtWebSocket).isConsumer = false
 				logger.info("Client unregistered as Screen Consumer")
 			}
 
@@ -130,15 +131,14 @@ export function createWsServer(server: any) {
 				try {
 					if (isBinary) {
 						// Relay frames from Providers to Consumers
-						if ((ws as ReinWebSocket).isProvider) {
+						if ((ws as ExtWebSocket).isProvider) {
 							for (const client of wss.clients) {
-								const consumer = client as ReinWebSocket
 								if (
-									consumer !== ws &&
-									consumer.isConsumer &&
-									consumer.readyState === WebSocket.OPEN
+									client !== ws &&
+									(client as ExtWebSocket).isConsumer &&
+									client.readyState === WebSocket.OPEN
 								) {
-									consumer.send(data, { binary: true })
+									client.send(data, { binary: true })
 								}
 							}
 						}
@@ -216,7 +216,7 @@ export function createWsServer(server: any) {
 					}
 
 					if (msg.type === "start-provider") {
-						;(ws as ReinWebSocket).isProvider = true
+						;(ws as ExtWebSocket).isProvider = true
 						logger.info("Client registered as Screen Provider")
 						return
 					}
@@ -318,11 +318,9 @@ export function createWsServer(server: any) {
 					}
 
 					await inputHandler.handleMessage(msg as InputMessage)
-				} catch (err) {
-					const error = err as Error
-					logger.error(
-						`Error processing message: ${error?.message || String(error)}`,
-					)
+				} catch (err: unknown) {
+					const errorMessage = err instanceof Error ? err.message : String(err)
+					logger.error(`Error processing message: ${errorMessage}`)
 				}
 			})
 

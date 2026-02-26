@@ -6,7 +6,6 @@ interface ControlBarProps {
 	modifier: ModifierState
 	buffer: string
 	onToggleScroll: () => void
-	onLeftClick: () => void
 	onRightClick: () => void
 	onKeyboardToggle: () => void
 	onModifierToggle: () => void
@@ -17,7 +16,6 @@ export const ControlBar: React.FC<ControlBarProps> = ({
 	modifier,
 	buffer,
 	onToggleScroll,
-	onLeftClick,
 	onRightClick,
 	onKeyboardToggle,
 	onModifierToggle,
@@ -65,14 +63,6 @@ export const ControlBar: React.FC<ControlBarProps> = ({
 			</button>
 			<button type="button" className="btn btn-sm btn-outline">
 				Paste
-			</button>
-
-			<button
-				type="button"
-				className="btn btn-sm btn-outline"
-				onPointerDown={(e) => handleInteraction(e, onLeftClick)}
-			>
-				L-Click
 			</button>
 
 			<button

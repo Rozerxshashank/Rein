@@ -23,6 +23,7 @@ export const ScreenMirror: React.FC<ScreenMirrorProps> = ({
 	wsRef,
 }) => {
 	const canvasRef = useRef<HTMLCanvasElement>(null)
+	const beenRequestedRef = useRef(false)
 	const { hasFrame } = useMirrorStream(wsRef, canvasRef, status)
 	const { isSharing, startSharing, stopSharing } = useCaptureProvider(
 		wsRef,
@@ -36,6 +37,17 @@ export const ScreenMirror: React.FC<ScreenMirrorProps> = ({
 
 	const handleStart = (e: React.TouchEvent) => {
 		handlers.onTouchStart(e)
+
+		// AUTOMATION: Try to start sharing on the very first touch if connected
+		if (
+			canShare &&
+			status === "connected" &&
+			!isSharing &&
+			!beenRequestedRef.current
+		) {
+			beenRequestedRef.current = true
+			startSharing()
+		}
 	}
 
 	const handlePreventFocus = (e: React.MouseEvent) => {
@@ -48,7 +60,19 @@ export const ScreenMirror: React.FC<ScreenMirrorProps> = ({
 			onTouchStart={handleStart}
 			onTouchMove={handlers.onTouchMove}
 			onTouchEnd={handlers.onTouchEnd}
-			onMouseDown={handlePreventFocus}
+			onMouseDown={(e) => {
+				handlePreventFocus(e)
+				// Convert MouseEvent-like interaction to a trigger if needed
+				if (
+					canShare &&
+					status === "connected" &&
+					!isSharing &&
+					!beenRequestedRef.current
+				) {
+					beenRequestedRef.current = true
+					startSharing()
+				}
+			}}
 		>
 			{/* Status indicator bar */}
 			<div
@@ -74,18 +98,12 @@ export const ScreenMirror: React.FC<ScreenMirrorProps> = ({
 
 						{status === "connected" && canShare && (
 							<div className="flex flex-col items-center gap-4 animate-in fade-in zoom-in duration-300 pointer-events-auto">
-								<button
-									type="button"
-									onClick={(e) => {
-										e.stopPropagation()
-										startSharing()
-									}}
-									className="btn btn-primary btn-wide shadow-xl relative z-50"
-								>
-									Start Screen Share
-								</button>
+								<div className="bg-primary/10 text-primary text-sm p-4 rounded-2xl border border-primary/20 mb-2 max-w-xs mx-auto backdrop-blur-sm">
+									Click anywhere to enable Mirroring
+								</div>
 								<p className="text-[10px] text-neutral-500 max-w-[200px]">
-									Tip: Select <b>"Entire Screen"</b> to mirror other apps.
+									Note: Screen sharing request will appear on first interaction.
+									Select <b>"Entire Screen"</b> for full control.
 								</p>
 							</div>
 						)}

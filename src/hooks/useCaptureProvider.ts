@@ -54,10 +54,32 @@ export function useCaptureProvider(
 		}
 	}, [])
 
-	// Diagnostics/Re-registration
+	// Diagnostics/Re-registration + Auto-start attempt
 	useEffect(() => {
 		if (status === "connected" && isSharingRef.current && wsRef.current) {
 			wsRef.current.send(JSON.stringify({ type: "start-provider" }))
+		}
+
+		// Auto-start logic: listen for the FIRST user gesture to trigger sharing
+		const canShareImplicitly =
+			typeof navigator !== "undefined" &&
+			!!navigator.mediaDevices?.getDisplayMedia &&
+			!isSharingRef.current
+
+		if (canShareImplicitly && status === "connected") {
+			const trigger = () => {
+				if (!isSharingRef.current) {
+					startSharing()
+				}
+				window.removeEventListener("click", trigger)
+				window.removeEventListener("touchstart", trigger)
+			}
+			window.addEventListener("click", trigger)
+			window.addEventListener("touchstart", trigger)
+			return () => {
+				window.removeEventListener("click", trigger)
+				window.removeEventListener("touchstart", trigger)
+			}
 		}
 	}, [status, wsRef])
 
@@ -133,9 +155,16 @@ export function useCaptureProvider(
 				video: {
 					frameRate: { ideal: 30 },
 					width: { ideal: 1280 },
+					// @ts-ignore - displaySurface is part of the spec but not always in typedefs
+					displaySurface: "monitor",
 				},
 				audio: false,
-			})
+				// @ts-ignore - Chrome specific hints to prioritize entire screen
+				selfBrowserSurface: "exclude",
+				monitorTypeSurfaces: "include",
+				systemAudio: "exclude",
+				// biome-ignore lint/suspicious/noExplicitAny: Newer MediaDevices properties not in local typings
+			} as any)
 
 			streamRef.current = stream
 
