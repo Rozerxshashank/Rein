@@ -1,9 +1,9 @@
-import type React from "react";
-import { useState } from "react";
+import type React from "react"
+import { useState } from "react"
 
 interface ExtraKeysProps {
-	sendKey: (key: string) => void;
-	onInputFocus?: () => void;
+	sendKey: (key: string) => void
+	onInputFocus?: () => void
 }
 
 /** All extra keys in one row (must match KeyMap.ts). Play/Pause is a single toggle. */
@@ -41,28 +41,28 @@ const EXTRA_KEYS: { label: string; key: string }[] = [
 	{ label: "Vol+", key: "audiovolup" },
 	{ label: "Prev", key: "audioprev" },
 	{ label: "Next", key: "audionext" },
-];
+]
 
 export const ExtraKeys: React.FC<ExtraKeysProps> = ({
 	sendKey,
 	onInputFocus: _onInputFocus,
 }) => {
-	const [isPlaying, setIsPlaying] = useState(false);
+	const [isPlaying, setIsPlaying] = useState(false)
 
 	const handleInteract = (e: React.PointerEvent, key: string) => {
-		e.preventDefault();
-		sendKey(key);
-	};
+		e.preventDefault()
+		sendKey(key)
+	}
 
 	const handlePlayPause = (e: React.PointerEvent) => {
-		e.preventDefault();
+		e.preventDefault()
 		if (isPlaying) {
-			sendKey("audiopause");
+			sendKey("audiopause")
 		} else {
-			sendKey("audioplay");
+			sendKey("audioplay")
 		}
-		setIsPlaying((prev) => !prev);
-	};
+		setIsPlaying((prev) => !prev)
+	}
 
 	return (
 		<div
@@ -72,8 +72,8 @@ export const ExtraKeys: React.FC<ExtraKeysProps> = ({
 			<div className="flex gap-2 flex-nowrap items-center min-w-max">
 				{EXTRA_KEYS.map(({ label, key }) => (
 					<button
-						key={key}
 						type="button"
+						key={key}
 						className="btn btn-sm btn-neutral min-w-[2.5rem] shrink-0"
 						onPointerDown={(e) => handleInteract(e, key)}
 					>
@@ -90,5 +90,5 @@ export const ExtraKeys: React.FC<ExtraKeysProps> = ({
 				</button>
 			</div>
 		</div>
-	);
-};
+	)
+}

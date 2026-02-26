@@ -1,14 +1,14 @@
-import type React from "react";
+import type React from "react"
 
 interface TouchAreaProps {
-	scrollMode: boolean;
-	isTracking: boolean;
+	scrollMode: boolean
+	isTracking: boolean
 	handlers: {
-		onTouchStart: (e: React.TouchEvent) => void;
-		onTouchMove: (e: React.TouchEvent) => void;
-		onTouchEnd: (e: React.TouchEvent) => void;
-	};
-	status: "connecting" | "connected" | "disconnected";
+		onTouchStart: (e: React.TouchEvent) => void
+		onTouchMove: (e: React.TouchEvent) => void
+		onTouchEnd: (e: React.TouchEvent) => void
+	}
+	status: "connecting" | "connected" | "disconnected"
 }
 
 export const TouchArea: React.FC<TouchAreaProps> = ({
@@ -18,12 +18,12 @@ export const TouchArea: React.FC<TouchAreaProps> = ({
 	status,
 }) => {
 	const handleStart = (e: React.TouchEvent) => {
-		handlers.onTouchStart(e);
-	};
+		handlers.onTouchStart(e)
+	}
 
 	const handlePreventFocus = (e: React.MouseEvent) => {
-		e.preventDefault();
-	};
+		e.preventDefault()
+	}
 
 	return (
 		<div
@@ -50,5 +50,5 @@ export const TouchArea: React.FC<TouchAreaProps> = ({
 				</div>
 			)}
 		</div>
-	);
-};
+	)
+}

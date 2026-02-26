@@ -1,207 +1,208 @@
-import { BufferBar } from "@/components/Trackpad/Buffer";
-import type { ModifierState } from "@/types";
-import { createFileRoute } from "@tanstack/react-router";
-import { useRef, useState } from "react";
-import { ControlBar } from "../components/Trackpad/ControlBar";
-import { ExtraKeys } from "../components/Trackpad/ExtraKeys";
-import { ScreenMirror } from "../components/Trackpad/ScreenMirror";
-import { useRemoteConnection } from "../hooks/useRemoteConnection";
-import { useTrackpadGesture } from "../hooks/useTrackpadGesture";
+import { BufferBar } from "@/components/Trackpad/Buffer"
+import type { ModifierState } from "@/types"
+import { createFileRoute } from "@tanstack/react-router"
+import { useRef, useState } from "react"
+import { ControlBar } from "../components/Trackpad/ControlBar"
+import { ExtraKeys } from "../components/Trackpad/ExtraKeys"
+import { ScreenMirror } from "../components/Trackpad/ScreenMirror"
+import { useRemoteConnection } from "../hooks/useRemoteConnection"
+import { useTrackpadGesture } from "../hooks/useTrackpadGesture"
 
 export const Route = createFileRoute("/trackpad")({
 	component: TrackpadPage,
-});
+})
 
 function TrackpadPage() {
-	const [scrollMode, setScrollMode] = useState(false);
-	const [modifier, setModifier] = useState<ModifierState>("Release");
-	const [buffer, setBuffer] = useState<string[]>([]);
-	const bufferText = buffer.join(" + ");
-	const hiddenInputRef = useRef<HTMLInputElement>(null);
-	const isComposingRef = useRef(false);
-	const prevCompositionDataRef = useRef("");
+	const [scrollMode, setScrollMode] = useState(false)
+	const [modifier, setModifier] = useState<ModifierState>("Release")
+	const [buffer, setBuffer] = useState<string[]>([])
+	const bufferText = buffer.join(" + ")
+	const hiddenInputRef = useRef<HTMLInputElement>(null)
+	const isComposingRef = useRef(false)
+	const prevCompositionDataRef = useRef("")
 
 	// Load Client Settings
 	const [sensitivity] = useState(() => {
-		if (typeof window === "undefined") return 1.0;
-		const s = localStorage.getItem("rein_sensitivity");
-		return s ? Number.parseFloat(s) : 1.0;
-	});
+		if (typeof window === "undefined") return 1.0
+		const s = localStorage.getItem("rein_sensitivity")
+		return s ? Number.parseFloat(s) : 1.0
+	})
 
 	const [invertScroll] = useState(() => {
-		if (typeof window === "undefined") return false;
-		const s = localStorage.getItem("rein_invert");
-		return s ? JSON.parse(s) : false;
-	});
+		if (typeof window === "undefined") return false
+		const s = localStorage.getItem("rein_invert")
+		return s ? JSON.parse(s) : false
+	})
 
-	const { status, send, sendCombo, wsRef } = useRemoteConnection();
+	const { status, send, sendCombo, wsRef } = useRemoteConnection()
+
 	// Pass sensitivity and invertScroll to the gesture hook
 	const { isTracking, handlers } = useTrackpadGesture(
 		send,
 		scrollMode,
 		sensitivity,
 		invertScroll,
-	);
+	)
 
 	const focusInput = () => {
-		hiddenInputRef.current?.focus();
-	};
+		hiddenInputRef.current?.focus()
+	}
 
 	const handleClick = (button: "left" | "right") => {
-		send({ type: "click", button, press: true });
+		send({ type: "click", button, press: true })
 		// Release after short delay to simulate click
-		setTimeout(() => send({ type: "click", button, press: false }), 50);
-	};
+		setTimeout(() => send({ type: "click", button, press: false }), 50)
+	}
 
 	const processCompositionDiff = (currentData: string, prevData: string) => {
-		if (currentData === prevData) return;
+		if (currentData === prevData) return
 
 		// Find common prefix length
-		let commonLen = 0;
+		let commonLen = 0
 		while (
 			commonLen < prevData.length &&
 			commonLen < currentData.length &&
 			prevData[commonLen] === currentData[commonLen]
 		) {
-			commonLen++;
+			commonLen++
 		}
 
 		// Send backspaces for removed/changed characters
-		const deletions = prevData.length - commonLen;
+		const deletions = prevData.length - commonLen
 		for (let i = 0; i < deletions; i++) {
-			send({ type: "key", key: "backspace" });
+			send({ type: "key", key: "backspace" })
 		}
 
 		// Send new characters individually
-		const newChars = currentData.slice(commonLen);
+		const newChars = currentData.slice(commonLen)
 		for (const char of newChars) {
 			if (modifier !== "Release") {
-				handleModifier(char);
+				handleModifier(char)
 			} else {
-				send({ type: "text", text: char });
+				send({ type: "text", text: char })
 			}
 		}
-	};
+	}
 
 	const handleCompositionStart = () => {
-		isComposingRef.current = true;
-		prevCompositionDataRef.current = "";
-	};
+		isComposingRef.current = true
+		prevCompositionDataRef.current = ""
+	}
 
 	const handleCompositionUpdate = (
 		e: React.CompositionEvent<HTMLInputElement>,
 	) => {
-		const currentData = e.data || "";
-		processCompositionDiff(currentData, prevCompositionDataRef.current);
-		prevCompositionDataRef.current = currentData;
-	};
+		const currentData = e.data || ""
+		processCompositionDiff(currentData, prevCompositionDataRef.current)
+		prevCompositionDataRef.current = currentData
+	}
 
 	const handleCompositionEnd = (
 		e: React.CompositionEvent<HTMLInputElement>,
 	) => {
-		const currentData = e.data || "";
-		processCompositionDiff(currentData, prevCompositionDataRef.current);
-		prevCompositionDataRef.current = "";
+		const currentData = e.data || ""
+		processCompositionDiff(currentData, prevCompositionDataRef.current)
+		prevCompositionDataRef.current = ""
 
 		// Clear input to prevent buffer accumulation
 		if (hiddenInputRef.current) {
-			hiddenInputRef.current.value = "";
+			hiddenInputRef.current.value = ""
 		}
 
 		// Delay flag reset so the onChange firing after compositionend is suppressed
 		setTimeout(() => {
-			isComposingRef.current = false;
-		}, 0);
-	};
+			isComposingRef.current = false
+		}, 0)
+	}
 
 	const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
 		// Skip during IME composition — composition handlers manage input
-		if (e.nativeEvent.isComposing || isComposingRef.current) return;
+		if (e.nativeEvent.isComposing || isComposingRef.current) return
 
-		const key = e.key.toLowerCase();
+		const key = e.key.toLowerCase()
 
 		if (modifier !== "Release") {
 			if (key === "backspace") {
-				e.preventDefault();
-				setBuffer((prev) => prev.slice(0, -1));
-				return;
+				e.preventDefault()
+				setBuffer((prev) => prev.slice(0, -1))
+				return
 			}
 			if (key === "escape") {
-				e.preventDefault();
-				setModifier("Release");
-				setBuffer([]);
-				return;
+				e.preventDefault()
+				setModifier("Release")
+				setBuffer([])
+				return
 			}
 			if (key !== "unidentified" && key.length > 1) {
-				e.preventDefault();
-				handleModifier(key);
+				e.preventDefault()
+				handleModifier(key)
 			}
-			return;
+			return
 		}
-		if (key === "backspace") send({ type: "key", key: "backspace" });
-		else if (key === "enter") send({ type: "key", key: "enter" });
+		if (key === "backspace") send({ type: "key", key: "backspace" })
+		else if (key === "enter") send({ type: "key", key: "enter" })
 		else if (key !== "unidentified" && key.length > 1) {
-			send({ type: "key", key });
+			send({ type: "key", key })
 		}
-	};
+	}
 
 	const handleModifierState = () => {
 		switch (modifier) {
 			case "Active":
 				if (buffer.length > 0) {
-					setModifier("Hold");
+					setModifier("Hold")
 				} else {
-					setModifier("Release");
+					setModifier("Release")
 				}
-				break;
+				break
 			case "Hold":
-				setModifier("Release");
-				setBuffer([]);
-				break;
+				setModifier("Release")
+				setBuffer([])
+				break
 			case "Release":
-				setModifier("Active");
-				setBuffer([]);
-				break;
+				setModifier("Active")
+				setBuffer([])
+				break
 		}
-	};
+	}
 
 	const handleModifier = (key: string) => {
 		if (modifier === "Hold") {
-			const comboKeys = [...buffer, key];
-			sendCombo(comboKeys);
-			return;
+			const comboKeys = [...buffer, key]
+			sendCombo(comboKeys)
+			return
 		}
 		if (modifier === "Active") {
-			setBuffer((prev) => [...prev, key]);
-			return;
+			setBuffer((prev) => [...prev, key])
+			return
 		}
-	};
+	}
 
 	const sendText = (val: string) => {
-		if (!val) return;
-		const toSend = val.length > 1 ? `${val} ` : val;
-		send({ type: "text", text: toSend });
-	};
+		if (!val) return
+		const toSend = val.length > 1 ? `${val} ` : val
+		send({ type: "text", text: toSend })
+	}
 
 	const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-		if (isComposingRef.current) return; // Skip during IME composition
-		const val = e.target.value;
+		if (isComposingRef.current) return // Skip during IME composition
+		const val = e.target.value
 		if (val) {
-			e.target.value = "";
+			e.target.value = ""
 			if (modifier !== "Release") {
-				handleModifier(val);
+				handleModifier(val)
 			} else {
-				sendText(val);
+				sendText(val)
 			}
 		}
-	};
+	}
 
 	const handleContainerClick = (e: React.MouseEvent) => {
 		if (e.target === e.currentTarget) {
-			e.preventDefault();
-			focusInput();
+			e.preventDefault()
+			focusInput()
 		}
-	};
+	}
 
 	return (
 		// biome-ignore lint/a11y/useKeyWithClickEvents: Layout container delegates focus to hidden input, not an interactive element
@@ -234,8 +235,8 @@ function TrackpadPage() {
 			{/* Extra Keys */}
 			<ExtraKeys
 				sendKey={(k) => {
-					if (modifier !== "Release") handleModifier(k);
-					else send({ type: "key", key: k });
+					if (modifier !== "Release") handleModifier(k)
+					else send({ type: "key", key: k })
 				}}
 				onInputFocus={focusInput}
 			/>
@@ -250,7 +251,7 @@ function TrackpadPage() {
 				onCompositionUpdate={handleCompositionUpdate}
 				onCompositionEnd={handleCompositionEnd}
 				onBlur={() => {
-					setTimeout(() => hiddenInputRef.current?.focus(), 10);
+					setTimeout(() => hiddenInputRef.current?.focus(), 10)
 				}}
 				autoComplete="off"
 				autoCorrect="off"
@@ -258,5 +259,5 @@ function TrackpadPage() {
 				spellCheck={false}
 			/>
 		</div>
-	);
+	)
 }

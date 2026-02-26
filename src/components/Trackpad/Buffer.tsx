@@ -1,9 +1,9 @@
-import type React from "react";
+import type React from "react"
 
 interface ControlBarProps {
-	bufferText: string;
+	bufferText: string
 }
 
 export const BufferBar: React.FC<ControlBarProps> = ({ bufferText }) => {
-	return <p>{bufferText}</p>;
-};
+	return <p>{bufferText}</p>
+}

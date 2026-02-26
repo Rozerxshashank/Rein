@@ -4,11 +4,11 @@ import {
 	Outlet,
 	Scripts,
 	createRootRoute,
-} from "@tanstack/react-router";
+} from "@tanstack/react-router"
 // import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
-import { useEffect } from "react";
-import { APP_CONFIG, THEMES } from "../config";
-import "../styles.css";
+import { useEffect } from "react"
+import { APP_CONFIG, THEMES } from "../config"
+import "../styles.css"
 
 export const Route = createRootRoute({
 	component: RootComponent,
@@ -17,10 +17,10 @@ export const Route = createRootRoute({
 			<RootDocument>
 				<div>Error: {props.error.message}</div>
 			</RootDocument>
-		);
+		)
 	},
 	notFoundComponent: () => <div>Not Found</div>,
-});
+})
 
 function RootComponent() {
 	return (
@@ -28,18 +28,18 @@ function RootComponent() {
 			<Outlet />
 			{/* <TanStackRouterDevtools position="bottom-right" /> */}
 		</RootDocument>
-	);
+	)
 }
 
 function ThemeInit() {
 	useEffect(() => {
-		if (typeof localStorage === "undefined") return;
-		const saved = localStorage.getItem(APP_CONFIG.THEME_STORAGE_KEY);
+		if (typeof localStorage === "undefined") return
+		const saved = localStorage.getItem(APP_CONFIG.THEME_STORAGE_KEY)
 		const theme =
-			saved === THEMES.LIGHT || saved === THEMES.DARK ? saved : THEMES.DEFAULT;
-		document.documentElement.setAttribute("data-theme", theme);
-	}, []);
-	return null;
+			saved === THEMES.LIGHT || saved === THEMES.DARK ? saved : THEMES.DEFAULT
+		document.documentElement.setAttribute("data-theme", theme)
+	}, [])
+	return null
 }
 
 function RootDocument({ children }: { children: React.ReactNode }) {
@@ -65,7 +65,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 				<Scripts />
 			</body>
 		</html>
-	);
+	)
 }
 
 function Navbar() {
@@ -99,5 +99,5 @@ function Navbar() {
 				</Link>
 			</div>
 		</div>
-	);
+	)
 }

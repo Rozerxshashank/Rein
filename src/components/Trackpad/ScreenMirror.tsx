@@ -1,18 +1,18 @@
-import type React from "react";
-import { useRef } from "react";
-import { useCaptureProvider } from "../../hooks/useCaptureProvider";
-import { useMirrorStream } from "../../hooks/useMirrorStream";
+import type React from "react"
+import { useRef } from "react"
+import { useCaptureProvider } from "../../hooks/useCaptureProvider"
+import { useMirrorStream } from "../../hooks/useMirrorStream"
 
 interface ScreenMirrorProps {
-	scrollMode: boolean;
-	isTracking: boolean;
+	scrollMode: boolean
+	isTracking: boolean
 	handlers: {
-		onTouchStart: (e: React.TouchEvent) => void;
-		onTouchMove: (e: React.TouchEvent) => void;
-		onTouchEnd: (e: React.TouchEvent) => void;
-	};
-	status: "connecting" | "connected" | "disconnected";
-	wsRef: React.RefObject<WebSocket | null>;
+		onTouchStart: (e: React.TouchEvent) => void
+		onTouchMove: (e: React.TouchEvent) => void
+		onTouchEnd: (e: React.TouchEvent) => void
+	}
+	status: "connecting" | "connected" | "disconnected"
+	wsRef: React.RefObject<WebSocket | null>
 }
 
 export const ScreenMirror: React.FC<ScreenMirrorProps> = ({
@@ -22,25 +22,25 @@ export const ScreenMirror: React.FC<ScreenMirrorProps> = ({
 	status,
 	wsRef,
 }) => {
-	const canvasRef = useRef<HTMLCanvasElement>(null);
-	const { hasFrame } = useMirrorStream(wsRef, canvasRef, status);
+	const canvasRef = useRef<HTMLCanvasElement>(null)
+	const { hasFrame } = useMirrorStream(wsRef, canvasRef, status)
 	const { isSharing, startSharing, stopSharing } = useCaptureProvider(
 		wsRef,
 		status,
-	);
+	)
 
 	// Only show sharing controls if the browser supports it (PC)
 	const canShare =
 		typeof navigator !== "undefined" &&
-		!!navigator.mediaDevices?.getDisplayMedia;
+		!!navigator.mediaDevices?.getDisplayMedia
 
 	const handleStart = (e: React.TouchEvent) => {
-		handlers.onTouchStart(e);
-	};
+		handlers.onTouchStart(e)
+	}
 
 	const handlePreventFocus = (e: React.MouseEvent) => {
-		e.preventDefault();
-	};
+		e.preventDefault()
+	}
 
 	return (
 		<div
@@ -77,8 +77,8 @@ export const ScreenMirror: React.FC<ScreenMirrorProps> = ({
 								<button
 									type="button"
 									onClick={(e) => {
-										e.stopPropagation();
-										startSharing();
+										e.stopPropagation()
+										startSharing()
 									}}
 									className="btn btn-primary btn-wide shadow-xl relative z-50"
 								>
@@ -134,5 +134,5 @@ export const ScreenMirror: React.FC<ScreenMirrorProps> = ({
 				</div>
 			)}
 		</div>
-	);
-};
+	)
+}

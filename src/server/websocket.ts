@@ -1,98 +1,98 @@
-import fs from "node:fs";
-import type { IncomingMessage } from "node:http";
-import type { Socket } from "node:net";
-import os from "node:os";
-import { WebSocket, WebSocketServer } from "ws";
-import logger from "../utils/logger";
-import { InputHandler, type InputMessage } from "./InputHandler";
+import fs from "node:fs"
+import type { IncomingMessage } from "node:http"
+import type { Socket } from "node:net"
+import os from "node:os"
+import { WebSocket, WebSocketServer } from "ws"
+import logger from "../utils/logger"
+import { InputHandler, type InputMessage } from "./InputHandler"
 import {
 	generateToken,
 	getActiveToken,
 	isKnownToken,
 	storeToken,
 	touchToken,
-} from "./tokenStore";
+} from "./tokenStore"
 
 function getLocalIp(): string {
-	const nets = os.networkInterfaces();
+	const nets = os.networkInterfaces()
 	for (const name of Object.keys(nets)) {
-		const netInterface = nets[name];
-		if (!netInterface) continue;
+		const netInterface = nets[name]
+		if (!netInterface) continue
 		for (const net of netInterface) {
 			if (net.family === "IPv4" && !net.internal) {
-				return net.address;
+				return net.address
 			}
 		}
 	}
-	return "localhost";
+	return "localhost"
 }
 
 function isLocalhost(request: IncomingMessage): boolean {
-	const addr = request.socket.remoteAddress;
-	if (!addr) return false;
-	return addr === "127.0.0.1" || addr === "::1" || addr === "::ffff:127.0.0.1";
+	const addr = request.socket.remoteAddress
+	if (!addr) return false
+	return addr === "127.0.0.1" || addr === "::1" || addr === "::ffff:127.0.0.1"
 }
 
 interface ReinWebSocket extends WebSocket {
-	isConsumer?: boolean;
-	isProvider?: boolean;
+	isConsumer?: boolean
+	isProvider?: boolean
 }
 
 // server: any is used to support Vite's dynamic httpServer types (http, https, http2)
 // biome-ignore lint/suspicious/noExplicitAny: Vite's server type is dynamic
 export function createWsServer(server: any) {
-	const wss = new WebSocketServer({ noServer: true });
-	const inputHandler = new InputHandler();
-	const LAN_IP = getLocalIp();
-	const MAX_PAYLOAD_SIZE = 10 * 1024; // 10KB limit
+	const wss = new WebSocketServer({ noServer: true })
+	const inputHandler = new InputHandler()
+	const LAN_IP = getLocalIp()
+	const MAX_PAYLOAD_SIZE = 10 * 1024 // 10KB limit
 
-	logger.info("WebSocket server initialized");
+	logger.info("WebSocket server initialized")
 
 	server.on(
 		"upgrade",
 		(request: IncomingMessage, socket: Socket, head: Buffer) => {
-			const url = new URL(request.url || "", `http://${request.headers.host}`);
+			const url = new URL(request.url || "", `http://${request.headers.host}`)
 
-			if (url.pathname !== "/ws") return;
+			if (url.pathname !== "/ws") return
 
-			const token = url.searchParams.get("token");
-			const local = isLocalhost(request);
+			const token = url.searchParams.get("token")
+			const local = isLocalhost(request)
 
 			logger.info(
 				`Upgrade request received from ${request.socket.remoteAddress}`,
-			);
+			)
 
 			if (local) {
-				logger.info("Localhost connection allowed");
+				logger.info("Localhost connection allowed")
 				wss.handleUpgrade(request, socket, head, (ws) => {
-					wss.emit("connection", ws, request, token, true);
-				});
-				return;
+					wss.emit("connection", ws, request, token, true)
+				})
+				return
 			}
 
 			// Remote connections require a token
 			if (!token) {
-				logger.warn("Unauthorized connection attempt: No token provided");
-				socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
-				socket.destroy();
-				return;
+				logger.warn("Unauthorized connection attempt: No token provided")
+				socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n")
+				socket.destroy()
+				return
 			}
 
 			// Validate against known tokens
 			if (!isKnownToken(token)) {
-				logger.warn("Unauthorized connection attempt: Invalid token");
-				socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
-				socket.destroy();
-				return;
+				logger.warn("Unauthorized connection attempt: Invalid token")
+				socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n")
+				socket.destroy()
+				return
 			}
 
-			logger.info("Remote connection authenticated successfully");
+			logger.info("Remote connection authenticated successfully")
 
 			wss.handleUpgrade(request, socket, head, (ws) => {
-				wss.emit("connection", ws, request, token, false);
-			});
+				wss.emit("connection", ws, request, token, false)
+			})
 		},
-	);
+	)
 
 	wss.on(
 		"connection",
@@ -104,27 +104,27 @@ export function createWsServer(server: any) {
 		) => {
 			// Localhost: only store token if it's already known (trusted scan)
 			// Remote: token is already validated in the upgrade handler
-			logger.info(`Client connected from ${request.socket.remoteAddress}`);
+			logger.info(`Client connected from ${request.socket.remoteAddress}`)
 
 			if (token && (isKnownToken(token) || !isLocal)) {
-				storeToken(token);
+				storeToken(token)
 			}
 
-			ws.send(JSON.stringify({ type: "connected", serverIp: LAN_IP }));
+			ws.send(JSON.stringify({ type: "connected", serverIp: LAN_IP }))
 
-			let lastRaw = "";
-			let lastTime = 0;
-			const DUPLICATE_WINDOW_MS = 100;
+			let lastRaw = ""
+			let lastTime = 0
+			const DUPLICATE_WINDOW_MS = 100
 
 			const startMirror = () => {
-				(ws as ReinWebSocket).isConsumer = true;
-				logger.info("Client registered as Screen Consumer");
-			};
+				;(ws as ReinWebSocket).isConsumer = true
+				logger.info("Client registered as Screen Consumer")
+			}
 
 			const stopMirror = () => {
-				(ws as ReinWebSocket).isConsumer = false;
-				logger.info("Client unregistered as Screen Consumer");
-			};
+				;(ws as ReinWebSocket).isConsumer = false
+				logger.info("Client unregistered as Screen Consumer")
+			}
 
 			ws.on("message", async (data: WebSocket.RawData, isBinary: boolean) => {
 				try {
@@ -132,95 +132,93 @@ export function createWsServer(server: any) {
 						// Relay frames from Providers to Consumers
 						if ((ws as ReinWebSocket).isProvider) {
 							for (const client of wss.clients) {
-								const consumer = client as ReinWebSocket;
+								const consumer = client as ReinWebSocket
 								if (
 									consumer !== ws &&
 									consumer.isConsumer &&
 									consumer.readyState === WebSocket.OPEN
 								) {
-									consumer.send(data, { binary: true });
+									consumer.send(data, { binary: true })
 								}
 							}
 						}
-						return;
+						return
 					}
-					const raw = data.toString();
-					const now = Date.now();
+					const raw = data.toString()
+					const now = Date.now()
 
 					// Prevent rapid identical message spam
 					if (raw === lastRaw && now - lastTime < DUPLICATE_WINDOW_MS) {
-						return;
+						return
 					}
 
-					lastRaw = raw;
-					lastTime = now;
+					lastRaw = raw
+					lastTime = now
 
-					logger.info(`Received message (${raw.length} bytes)`);
+					logger.info(`Received message (${raw.length} bytes)`)
 
 					if (raw.length > MAX_PAYLOAD_SIZE) {
-						logger.warn("Payload too large, rejecting message.");
-						return;
+						logger.warn("Payload too large, rejecting message.")
+						return
 					}
 
-					const msg = JSON.parse(raw);
+					const msg = JSON.parse(raw)
 					if (msg.type !== "get-ip" && msg.type !== "ping") {
-						logger.info(
-							`Msg: ${msg.type} from ${request.socket.remoteAddress}`,
-						);
+						logger.info(`Msg: ${msg.type} from ${request.socket.remoteAddress}`)
 					}
 
 					// PERFORMANCE: Only touch if it's an actual command (not ping/ip)
 					if (token && msg.type !== "get-ip" && msg.type !== "generate-token") {
-						touchToken(token);
+						touchToken(token)
 					}
 
 					if (msg.type === "get-ip") {
-						ws.send(JSON.stringify({ type: "server-ip", ip: LAN_IP }));
-						return;
+						ws.send(JSON.stringify({ type: "server-ip", ip: LAN_IP }))
+						return
 					}
 
 					if (msg.type === "generate-token") {
 						if (!isLocal) {
-							logger.warn("Token generation attempt from non-localhost");
+							logger.warn("Token generation attempt from non-localhost")
 							ws.send(
 								JSON.stringify({
 									type: "auth-error",
 									error: "Only localhost can generate tokens",
 								}),
-							);
-							return;
+							)
+							return
 						}
 
 						// Idempotent: return active token if one exists
-						let tokenToReturn = getActiveToken();
+						let tokenToReturn = getActiveToken()
 						if (!tokenToReturn) {
-							tokenToReturn = generateToken();
-							storeToken(tokenToReturn);
-							logger.info("New token generated");
+							tokenToReturn = generateToken()
+							storeToken(tokenToReturn)
+							logger.info("New token generated")
 						} else {
-							logger.info("Existing active token returned");
+							logger.info("Existing active token returned")
 						}
 
 						ws.send(
 							JSON.stringify({ type: "token-generated", token: tokenToReturn }),
-						);
-						return;
+						)
+						return
 					}
 
 					if (msg.type === "start-mirror") {
-						startMirror();
-						return;
+						startMirror()
+						return
 					}
 
 					if (msg.type === "stop-mirror") {
-						stopMirror();
-						return;
+						stopMirror()
+						return
 					}
 
 					if (msg.type === "start-provider") {
-						(ws as ReinWebSocket).isProvider = true;
-						logger.info("Client registered as Screen Provider");
-						return;
+						;(ws as ReinWebSocket).isProvider = true
+						logger.info("Client registered as Screen Provider")
+						return
 					}
 
 					if (msg.type === "update-config") {
@@ -236,18 +234,18 @@ export function createWsServer(server: any) {
 										success: false,
 										error: "Invalid config payload",
 									}),
-								);
-								return;
+								)
+								return
 							}
 
-							const SERVER_CONFIG_KEYS = ["host", "frontendPort", "address"];
-							const filtered: Record<string, unknown> = {};
+							const SERVER_CONFIG_KEYS = ["host", "frontendPort", "address"]
+							const filtered: Record<string, unknown> = {}
 
 							for (const key of SERVER_CONFIG_KEYS) {
-								if (!(key in msg.config)) continue;
+								if (!(key in msg.config)) continue
 
 								if (key === "frontendPort") {
-									const port = Number(msg.config[key]);
+									const port = Number(msg.config[key])
 									if (
 										!Number.isFinite(port) ||
 										port < 1 ||
@@ -260,15 +258,15 @@ export function createWsServer(server: any) {
 												success: false,
 												error: "Invalid port number (must be 1–65535)",
 											}),
-										);
-										return;
+										)
+										return
 									}
-									filtered[key] = port;
+									filtered[key] = port
 								} else if (
 									typeof msg.config[key] === "string" &&
 									msg.config[key].length <= 255
 								) {
-									filtered[key] = msg.config[key];
+									filtered[key] = msg.config[key]
 								}
 							}
 
@@ -279,32 +277,30 @@ export function createWsServer(server: any) {
 										success: false,
 										error: "No valid config keys provided",
 									}),
-								);
-								return;
+								)
+								return
 							}
 
-							const configPath = "./src/server-config.json";
+							const configPath = "./src/server-config.json"
 							const current = fs.existsSync(configPath)
 								? JSON.parse(fs.readFileSync(configPath, "utf-8"))
-								: {};
-							const newConfig = { ...current, ...filtered };
-							fs.writeFileSync(configPath, JSON.stringify(newConfig, null, 2));
+								: {}
+							const newConfig = { ...current, ...filtered }
+							fs.writeFileSync(configPath, JSON.stringify(newConfig, null, 2))
 
-							logger.info("Server configuration updated");
-							ws.send(
-								JSON.stringify({ type: "config-updated", success: true }),
-							);
+							logger.info("Server configuration updated")
+							ws.send(JSON.stringify({ type: "config-updated", success: true }))
 						} catch (e) {
-							logger.error(`Failed to update config: ${String(e)}`);
+							logger.error(`Failed to update config: ${String(e)}`)
 							ws.send(
 								JSON.stringify({
 									type: "config-updated",
 									success: false,
 									error: String(e),
 								}),
-							);
+							)
 						}
-						return;
+						return
 					}
 
 					const VALID_INPUT_TYPES = [
@@ -315,30 +311,30 @@ export function createWsServer(server: any) {
 						"text",
 						"zoom",
 						"combo",
-					];
+					]
 					if (!msg.type || !VALID_INPUT_TYPES.includes(msg.type)) {
-						logger.warn(`Unknown message type: ${msg.type}`);
-						return;
+						logger.warn(`Unknown message type: ${msg.type}`)
+						return
 					}
 
-					await inputHandler.handleMessage(msg as InputMessage);
+					await inputHandler.handleMessage(msg as InputMessage)
 				} catch (err) {
-					const error = err as Error;
+					const error = err as Error
 					logger.error(
 						`Error processing message: ${error?.message || String(error)}`,
-					);
+					)
 				}
-			});
+			})
 
 			ws.on("close", () => {
-				stopMirror();
-				logger.info("Client disconnected");
-			});
+				stopMirror()
+				logger.info("Client disconnected")
+			})
 
 			ws.on("error", (error: Error) => {
-				console.error("WebSocket error:", error);
-				logger.error(`WebSocket error: ${error.message}`);
-			});
+				console.error("WebSocket error:", error)
+				logger.error(`WebSocket error: ${error.message}`)
+			})
 		},
-	);
+	)
 }

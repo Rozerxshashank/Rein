@@ -1,103 +1,103 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react"
 
 export const useRemoteConnection = () => {
-	const wsRef = useRef<WebSocket | null>(null);
+	const wsRef = useRef<WebSocket | null>(null)
 	const [status, setStatus] = useState<
 		"connecting" | "connected" | "disconnected"
-	>("disconnected");
-	const [platform, setPlatform] = useState<string | null>(null);
+	>("disconnected")
+	const [platform, setPlatform] = useState<string | null>(null)
 
 	useEffect(() => {
-		let isMounted = true;
-		const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-		const host = window.location.host;
+		let isMounted = true
+		const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
+		const host = window.location.host
 
 		// Get token from URL params (passed via QR code) or localStorage
-		const urlParams = new URLSearchParams(window.location.search);
-		const urlToken = urlParams.get("token");
-		const storedToken = localStorage.getItem("rein_auth_token");
-		const token = urlToken || storedToken;
+		const urlParams = new URLSearchParams(window.location.search)
+		const urlToken = urlParams.get("token")
+		const storedToken = localStorage.getItem("rein_auth_token")
+		const token = urlToken || storedToken
 
 		// Persist URL token to localStorage for future reconnections
 		if (urlToken && urlToken !== storedToken) {
-			localStorage.setItem("rein_auth_token", urlToken);
+			localStorage.setItem("rein_auth_token", urlToken)
 		}
 
-		let wsUrl = `${protocol}//${host}/ws`;
+		let wsUrl = `${protocol}//${host}/ws`
 		if (token) {
-			wsUrl += `?token=${encodeURIComponent(token)}`;
+			wsUrl += `?token=${encodeURIComponent(token)}`
 		}
 
-		let reconnectTimer: NodeJS.Timeout;
+		let reconnectTimer: NodeJS.Timeout
 
 		const connect = () => {
-			if (!isMounted) return;
+			if (!isMounted) return
 
 			// Close any existing socket before creating a new one
 			if (wsRef.current) {
-				wsRef.current.onopen = null;
-				wsRef.current.onclose = null;
-				wsRef.current.onerror = null;
-				wsRef.current.close();
-				wsRef.current = null;
+				wsRef.current.onopen = null
+				wsRef.current.onclose = null
+				wsRef.current.onerror = null
+				wsRef.current.close()
+				wsRef.current = null
 			}
 
-			setStatus("connecting");
-			const socket = new WebSocket(wsUrl);
+			setStatus("connecting")
+			const socket = new WebSocket(wsUrl)
 
 			socket.onopen = () => {
-				if (isMounted) setStatus("connected");
-			};
+				if (isMounted) setStatus("connected")
+			}
 
 			socket.onmessage = (event) => {
-				if (!isMounted || typeof event.data !== "string") return;
+				if (!isMounted || typeof event.data !== "string") return
 				try {
-					const msg = JSON.parse(event.data);
+					const msg = JSON.parse(event.data)
 					if (msg.type === "connected") {
-						setPlatform(msg.platform);
+						setPlatform(msg.platform)
 					}
 				} catch (e) {
 					// Ignore non-json or binary messages handled by other hooks
 				}
-			};
+			}
 			socket.onclose = () => {
 				if (isMounted) {
-					setStatus("disconnected");
-					setPlatform(null);
-					reconnectTimer = setTimeout(connect, 3000);
+					setStatus("disconnected")
+					setPlatform(null)
+					reconnectTimer = setTimeout(connect, 3000)
 				}
-			};
+			}
 			socket.onerror = () => {
-				socket.close();
-			};
+				socket.close()
+			}
 
-			wsRef.current = socket;
-		};
+			wsRef.current = socket
+		}
 
 		// Defer to next tick so React Strict Mode's immediate unmount
 		// sets isMounted=false before any socket is created
-		const initialTimer = setTimeout(connect, 0);
+		const initialTimer = setTimeout(connect, 0)
 
 		return () => {
-			isMounted = false;
-			clearTimeout(initialTimer);
-			clearTimeout(reconnectTimer);
+			isMounted = false
+			clearTimeout(initialTimer)
+			clearTimeout(reconnectTimer)
 			if (wsRef.current) {
 				// Nullify handlers to prevent cascading error/close events
-				wsRef.current.onopen = null;
-				wsRef.current.onclose = null;
-				wsRef.current.onerror = null;
-				wsRef.current.close();
-				wsRef.current = null;
+				wsRef.current.onopen = null
+				wsRef.current.onclose = null
+				wsRef.current.onerror = null
+				wsRef.current.close()
+				wsRef.current = null
 			}
-		};
-	}, []);
+		}
+	}, [])
 
 	const send = useCallback((msg: unknown) => {
 		if (wsRef.current?.readyState === WebSocket.OPEN) {
-			wsRef.current.send(JSON.stringify(msg));
+			wsRef.current.send(JSON.stringify(msg))
 		}
-	}, []);
+	}, [])
 
 	const sendCombo = useCallback((msg: string[]) => {
 		if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -106,9 +106,9 @@ export const useRemoteConnection = () => {
 					type: "combo",
 					keys: msg,
 				}),
-			);
+			)
 		}
-	}, []);
+	}, [])
 
-	return { status, platform, send, sendCombo, wsRef };
-};
+	return { status, platform, send, sendCombo, wsRef }
+}

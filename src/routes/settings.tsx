@@ -1,170 +1,168 @@
-import { createFileRoute } from "@tanstack/react-router";
-import QRCode from "qrcode";
-import { useEffect, useState } from "react";
-import { APP_CONFIG, CONFIG, THEMES } from "../config";
+import { createFileRoute } from "@tanstack/react-router"
+import QRCode from "qrcode"
+import { useEffect, useState } from "react"
+import { APP_CONFIG, CONFIG, THEMES } from "../config"
 
 export const Route = createFileRoute("/settings")({
 	component: SettingsPage,
-});
+})
 
 function SettingsPage() {
-	const [ip, setIp] = useState("");
-	const [frontendPort, setFrontendPort] = useState(
-		String(CONFIG.FRONTEND_PORT),
-	);
-	const [originalPort] = useState(String(CONFIG.FRONTEND_PORT));
+	const [ip, setIp] = useState("")
+	const [frontendPort, setFrontendPort] = useState(String(CONFIG.FRONTEND_PORT))
+	const [originalPort] = useState(String(CONFIG.FRONTEND_PORT))
 
-	const serverConfigChanged = frontendPort !== originalPort;
+	const serverConfigChanged = frontendPort !== originalPort
 
 	// Client Side Settings (LocalStorage)
 	const [invertScroll, setInvertScroll] = useState(() => {
-		if (typeof window === "undefined") return false;
+		if (typeof window === "undefined") return false
 		try {
-			const saved = localStorage.getItem("rein_invert");
-			return saved === "true";
+			const saved = localStorage.getItem("rein_invert")
+			return saved === "true"
 		} catch {
-			return false;
+			return false
 		}
-	});
+	})
 
 	const [sensitivity, setSensitivity] = useState(() => {
-		if (typeof window === "undefined") return 1.0;
-		const saved = localStorage.getItem("rein_sensitivity");
-		const parsed = saved ? Number.parseFloat(saved) : Number.NaN;
-		return Number.isFinite(parsed) ? parsed : 1.0;
-	});
+		if (typeof window === "undefined") return 1.0
+		const saved = localStorage.getItem("rein_sensitivity")
+		const parsed = saved ? Number.parseFloat(saved) : Number.NaN
+		return Number.isFinite(parsed) ? parsed : 1.0
+	})
 
 	const [theme, setTheme] = useState(() => {
-		if (typeof window === "undefined") return THEMES.DEFAULT;
+		if (typeof window === "undefined") return THEMES.DEFAULT
 		try {
-			const saved = localStorage.getItem(APP_CONFIG.THEME_STORAGE_KEY);
+			const saved = localStorage.getItem(APP_CONFIG.THEME_STORAGE_KEY)
 			return saved === THEMES.LIGHT || saved === THEMES.DARK
 				? saved
-				: THEMES.DEFAULT;
+				: THEMES.DEFAULT
 		} catch {
-			return THEMES.DEFAULT;
+			return THEMES.DEFAULT
 		}
-	});
+	})
 
-	const [qrData, setQrData] = useState("");
+	const [qrData, setQrData] = useState("")
 
 	// Load initial state (IP is not stored in localStorage; only sensitivity, invert, theme are client settings)
 	const [authToken, setAuthToken] = useState(() => {
-		if (typeof window === "undefined") return "";
-		return localStorage.getItem("rein_auth_token") || "";
-	});
+		if (typeof window === "undefined") return ""
+		return localStorage.getItem("rein_auth_token") || ""
+	})
 
 	// Derive URLs once at the top
-	const appPort = String(frontendPort);
+	const appPort = String(frontendPort)
 	const protocol =
-		typeof window !== "undefined" ? window.location.protocol : "http:";
+		typeof window !== "undefined" ? window.location.protocol : "http:"
 	const shareUrl = ip
 		? `${protocol}//${ip}:${appPort}/trackpad${authToken ? `?token=${encodeURIComponent(authToken)}` : ""}`
-		: "";
+		: ""
 
 	useEffect(() => {
 		const defaultIp =
-			typeof window !== "undefined" ? window.location.hostname : "localhost";
-		setIp(defaultIp);
-		setFrontendPort(String(CONFIG.FRONTEND_PORT));
-	}, []);
+			typeof window !== "undefined" ? window.location.hostname : "localhost"
+		setIp(defaultIp)
+		setFrontendPort(String(CONFIG.FRONTEND_PORT))
+	}, [])
 
 	// Auto-generate token on settings page load (localhost only)
 	useEffect(() => {
-		if (typeof window === "undefined") return;
+		if (typeof window === "undefined") return
 
-		let isMounted = true;
+		let isMounted = true
 
-		const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-		const wsUrl = `${protocol}//${window.location.host}/ws`;
-		const socket = new WebSocket(wsUrl);
+		const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
+		const wsUrl = `${protocol}//${window.location.host}/ws`
+		const socket = new WebSocket(wsUrl)
 
 		socket.onopen = () => {
 			if (socket.readyState === WebSocket.OPEN) {
-				socket.send(JSON.stringify({ type: "generate-token" }));
+				socket.send(JSON.stringify({ type: "generate-token" }))
 			}
-		};
+		}
 
 		socket.onmessage = (event) => {
 			try {
-				const data = JSON.parse(event.data);
+				const data = JSON.parse(event.data)
 				if (data.type === "token-generated" && data.token) {
 					if (isMounted) {
-						setAuthToken(data.token);
-						localStorage.setItem("rein_auth_token", data.token);
+						setAuthToken(data.token)
+						localStorage.setItem("rein_auth_token", data.token)
 					}
-					socket.close();
+					socket.close()
 				}
 			} catch (e) {
-				console.error(e);
+				console.error(e)
 			}
-		};
+		}
 
 		return () => {
-			isMounted = false;
+			isMounted = false
 			if (
 				socket.readyState === WebSocket.OPEN ||
 				socket.readyState === WebSocket.CONNECTING
 			) {
-				socket.close();
+				socket.close()
 			}
-		};
-	}, []);
+		}
+	}, [])
 
 	// Effect: Update LocalStorage when settings change
 	useEffect(() => {
-		localStorage.setItem("rein_sensitivity", String(sensitivity));
-	}, [sensitivity]);
+		localStorage.setItem("rein_sensitivity", String(sensitivity))
+	}, [sensitivity])
 
 	useEffect(() => {
-		localStorage.setItem("rein_invert", JSON.stringify(invertScroll));
-	}, [invertScroll]);
+		localStorage.setItem("rein_invert", JSON.stringify(invertScroll))
+	}, [invertScroll])
 
 	// Effect: Theme
 	useEffect(() => {
-		if (typeof window === "undefined") return;
-		localStorage.setItem(APP_CONFIG.THEME_STORAGE_KEY, theme);
-		document.documentElement.setAttribute("data-theme", theme);
-	}, [theme]);
+		if (typeof window === "undefined") return
+		localStorage.setItem(APP_CONFIG.THEME_STORAGE_KEY, theme)
+		document.documentElement.setAttribute("data-theme", theme)
+	}, [theme])
 
 	// Generate QR when IP changes or Token changes
 	useEffect(() => {
-		if (!ip || typeof window === "undefined" || !shareUrl) return;
+		if (!ip || typeof window === "undefined" || !shareUrl) return
 
 		QRCode.toDataURL(shareUrl)
 			.then(setQrData)
-			.catch((e) => console.error("QR Error:", e));
-	}, [ip, shareUrl]);
+			.catch((e) => console.error("QR Error:", e))
+	}, [ip, shareUrl])
 
 	// Effect: Auto-detect LAN IP from Server (only if on localhost)
 	useEffect(() => {
-		if (typeof window === "undefined") return;
-		if (window.location.hostname !== "localhost") return;
+		if (typeof window === "undefined") return
+		if (window.location.hostname !== "localhost") return
 
-		const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-		const wsUrl = `${protocol}//${window.location.host}/ws`;
-		const socket = new WebSocket(wsUrl);
+		const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
+		const wsUrl = `${protocol}//${window.location.host}/ws`
+		const socket = new WebSocket(wsUrl)
 
 		socket.onopen = () => {
-			socket.send(JSON.stringify({ type: "get-ip" }));
-		};
+			socket.send(JSON.stringify({ type: "get-ip" }))
+		}
 
 		socket.onmessage = (event) => {
 			try {
-				const data = JSON.parse(event.data);
+				const data = JSON.parse(event.data)
 				if (data.type === "server-ip" && data.ip) {
-					setIp(data.ip);
-					socket.close();
+					setIp(data.ip)
+					socket.close()
 				}
 			} catch (e) {
-				console.error(e);
+				console.error(e)
 			}
-		};
+		}
 
 		return () => {
-			if (socket.readyState === WebSocket.OPEN) socket.close();
-		};
-	}, []);
+			if (socket.readyState === WebSocket.OPEN) socket.close()
+		}
+	}, [])
 
 	return (
 		<div className="h-full overflow-y-auto w-full">
@@ -205,22 +203,27 @@ function SettingsPage() {
 						</div>
 
 						<div className="form-control w-full">
-							<label className="label cursor-pointer">
+							<label
+								className="label cursor-pointer"
+								htmlFor="invert-scroll-toggle"
+							>
 								<span className="label-text font-medium">Invert Scroll</span>
 								<input
+									id="invert-scroll-toggle"
 									type="checkbox"
 									className="toggle toggle-primary"
 									checked={invertScroll}
 									onChange={(e) => setInvertScroll(e.target.checked)}
 								/>
 							</label>
-							<div className="label">
+
+							<label className="label" htmlFor="invert-scroll-toggle">
 								<span className="label-text-alt opacity-50">
 									{invertScroll
 										? "Traditional scrolling enabled"
 										: "Natural scrolling"}
 								</span>
-							</div>
+							</label>
 						</div>
 
 						<div className="form-control w-full">
@@ -246,6 +249,7 @@ function SettingsPage() {
 							<label className="label mb-3" htmlFor="server-ip-input">
 								<span className="label-text">Server IP (for Remote)</span>
 							</label>
+
 							<input
 								id="server-ip-input"
 								type="text"
@@ -254,11 +258,12 @@ function SettingsPage() {
 								value={ip}
 								onChange={(e) => setIp(e.target.value)}
 							/>
-							<div className="label">
+
+							<label className="label" htmlFor="server-ip-input">
 								<span className="label-text-alt opacity-50">
 									This Computer's LAN IP
 								</span>
-							</div>
+							</label>
 						</div>
 
 						<div className="form-control w-full">
@@ -301,21 +306,21 @@ function SettingsPage() {
 							className="btn btn-primary w-full rounded-md"
 							disabled={!serverConfigChanged}
 							onClick={() => {
-								const port = Number.parseInt(frontendPort, 10);
+								const port = Number.parseInt(frontendPort, 10)
 								if (!Number.isFinite(port) || port < 1 || port > 65535) {
-									alert("Please enter a valid port number (1–65535).");
-									return;
+									alert("Please enter a valid port number (1–65535).")
+									return
 								}
 
 								const protocol =
-									window.location.protocol === "https:" ? "wss:" : "ws:";
-								const host = window.location.host;
-								const wsUrl = `${protocol}//${host}/ws`;
-								const socket = new WebSocket(wsUrl);
+									window.location.protocol === "https:" ? "wss:" : "ws:"
+								const host = window.location.host
+								const wsUrl = `${protocol}//${host}/ws`
+								const socket = new WebSocket(wsUrl)
 
 								socket.onerror = () => {
-									alert("Failed to connect to the server.");
-								};
+									alert("Failed to connect to the server.")
+								}
 
 								socket.onopen = () => {
 									socket.send(
@@ -325,16 +330,16 @@ function SettingsPage() {
 												frontendPort: port,
 											},
 										}),
-									);
+									)
 
 									setTimeout(() => {
-										socket.close();
-										const newProtocol = window.location.protocol;
-										const newHostname = window.location.hostname;
-										const newUrl = `${newProtocol}//${newHostname}:${frontendPort}/settings`;
-										window.location.href = newUrl;
-									}, 1000);
-								};
+										socket.close()
+										const newProtocol = window.location.protocol
+										const newHostname = window.location.hostname
+										const newUrl = `${newProtocol}//${newHostname}:${frontendPort}/settings`
+										window.location.href = newUrl
+									}, 1000)
+								}
 							}}
 						>
 							Save Config
@@ -374,5 +379,5 @@ function SettingsPage() {
 				</div>
 			</div>
 		</div>
-	);
+	)
 }

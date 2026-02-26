@@ -1,13 +1,13 @@
-import { URL, fileURLToPath } from "node:url";
-import { devtools } from "@tanstack/devtools-vite";
-import { tanstackStart } from "@tanstack/react-start/plugin/vite";
-import viteReact from "@vitejs/plugin-react";
-import { nitro } from "nitro/vite";
-import { defineConfig } from "vite";
-import viteTsConfigPaths from "vite-tsconfig-paths";
-import serverConfig from "./src/server-config.json";
+import { URL, fileURLToPath } from "node:url"
+import { devtools } from "@tanstack/devtools-vite"
+import { tanstackStart } from "@tanstack/react-start/plugin/vite"
+import viteReact from "@vitejs/plugin-react"
+import { nitro } from "nitro/vite"
+import { defineConfig } from "vite"
+import viteTsConfigPaths from "vite-tsconfig-paths"
+import serverConfig from "./src/server-config.json"
 
-import { createWsServer } from "./src/server/websocket";
+import { createWsServer } from "./src/server/websocket"
 
 const config = defineConfig({
 	resolve: {
@@ -20,12 +20,12 @@ const config = defineConfig({
 			name: "websocket-server",
 			configureServer(server) {
 				if (server.httpServer) {
-					createWsServer(server.httpServer);
+					createWsServer(server.httpServer)
 				}
 			},
 			configurePreviewServer(server) {
 				if (server.httpServer) {
-					createWsServer(server.httpServer);
+					createWsServer(server.httpServer)
 				}
 			},
 		},
@@ -43,6 +43,6 @@ const config = defineConfig({
 		host: serverConfig.host === "0.0.0.0" ? true : serverConfig.host,
 		port: serverConfig.frontendPort,
 	},
-});
+})
 
-export default config;
+export default config
