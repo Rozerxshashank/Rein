@@ -5,6 +5,11 @@ import os from "node:os"
 import { type WebSocket, WebSocketServer } from "ws"
 import logger from "../utils/logger"
 import { InputHandler, type InputMessage } from "./InputHandler"
+import type { Server as HttpServer } from "node:http"
+import type { Server as HttpsServer } from "node:https"
+
+type CompatibleServer = HttpServer | HttpsServer
+
 import {
 	generateToken,
 	getActiveToken,
@@ -32,7 +37,7 @@ function isLocalhost(request: IncomingMessage): boolean {
 }
 
 // server: any is used to support Vite's dynamic httpServer types (http, https, http2)
-export function createWsServer(server: unknown) {
+export function createWsServer(server: CompatibleServer) {
 	const configPath = "./src/server-config.json"
 	let serverConfig: Record<string, unknown> = {}
 	if (fs.existsSync(configPath)) {
