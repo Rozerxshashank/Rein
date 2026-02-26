@@ -23,7 +23,7 @@ function TrackpadPage() {
     const [sensitivity] = useState(() => {
         if (typeof window === 'undefined') return 1.0;
         const s = localStorage.getItem('rein_sensitivity');
-        return s ? parseFloat(s) : 1.0;
+        return s ? Number.parseFloat(s) : 1.0;
     });
 
     const [invertScroll] = useState(() => {
@@ -160,6 +160,7 @@ function TrackpadPage() {
     };
 
     return (
+        // biome-ignore lint/a11y/useKeyWithClickEvents: Layout container delegates focus to hidden input, not an interactive element
         <div
             className="flex flex-col h-full overflow-hidden"
             onClick={handleContainerClick}
@@ -210,7 +211,6 @@ function TrackpadPage() {
                 spellCheck={false}
                 inputMode="text"
                 enterKeyHint="enter"
-                autoFocus
             />
         </div>
     );
