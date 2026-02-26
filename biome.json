@@ -19,7 +19,7 @@
 	},
 
 	"organizeImports": {
-		"enabled": true
+		"enabled": false
 	},
 
 	"linter": {

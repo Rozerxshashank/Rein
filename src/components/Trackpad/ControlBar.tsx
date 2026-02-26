@@ -1,5 +1,13 @@
 import type { ModifierState } from "@/types"
 import type React from "react"
+import {
+	MousePointer2,
+	Mouse,
+	Copy,
+	ClipboardPaste,
+	Keyboard,
+	X,
+} from "lucide-react"
 
 interface ControlBarProps {
 	scrollMode: boolean
@@ -10,40 +18,30 @@ interface ControlBarProps {
 	onRightClick: () => void
 	onKeyboardToggle: () => void
 	onModifierToggle: () => void
+	keyboardOpen: boolean
+	extraKeysVisible: boolean
+	onExtraKeysToggle: () => void
 }
 
 export const ControlBar: React.FC<ControlBarProps> = ({
 	scrollMode,
 	modifier,
-	buffer,
 	onToggleScroll,
 	onLeftClick,
 	onRightClick,
 	onKeyboardToggle,
 	onModifierToggle,
+	buffer,
 }) => {
 	const handleInteraction = (e: React.PointerEvent, action: () => void) => {
 		e.preventDefault()
 		action()
 	}
 
-	const getModifierButtonClass = () => {
-		switch (modifier) {
-			case "Active":
-				if (buffer.length > 0) return "btn-success"
-				return "btn-warning"
-			case "Hold":
-				return "btn-warning"
-			default:
-				return "btn-secondary"
-		}
-	}
-
 	const getModifierLabel = () => {
 		switch (modifier) {
 			case "Active":
-				if (buffer.length > 0) return "Press"
-				return "Release"
+				return buffer.length > 0 ? "Press" : "Release"
 			case "Hold":
 				return "Release"
 			case "Release":
@@ -51,51 +49,75 @@ export const ControlBar: React.FC<ControlBarProps> = ({
 		}
 	}
 
-	return (
-		<div className="bg-base-200 p-2 grid grid-cols-5 gap-2 shrink-0">
-			<button
-				type="button"
-				className={`btn btn-sm ${scrollMode ? "btn-primary" : "btn-outline"}`}
-				onPointerDown={(e) => handleInteraction(e, onToggleScroll)}
-			>
-				{scrollMode ? "Scroll" : "Cursor"}
-			</button>
-			<button type="button" className="btn btn-sm btn-outline">
-				Copy
-			</button>
-			<button type="button" className="btn btn-sm btn-outline">
-				Paste
-			</button>
+	const baseButton =
+		"flex-1 flex items-center justify-center h-[44px] bg-base-100 hover:bg-base-300 active:scale-[0.97] transition-all duration-100"
 
-			<button
-				type="button"
-				className="btn btn-sm btn-outline"
-				onPointerDown={(e) => handleInteraction(e, onLeftClick)}
-			>
-				L-Click
-			</button>
+	const ModifierButton = () => {
+		const isHold = modifier === "Hold"
+		const label = getModifierLabel()
 
+		return (
 			<button
 				type="button"
-				className="btn btn-sm btn-outline"
-				onPointerDown={(e) => handleInteraction(e, onRightClick)}
-			>
-				R-Click
-			</button>
-			<button
-				type="button"
-				className={`btn btn-sm ${getModifierButtonClass()}`}
+				className={`flex items-center justify-center w-[54px] h-[44px] transition-all duration-100 ${
+					isHold
+						? "bg-neutral-900 hover:bg-neutral-800 active:bg-neutral-800"
+						: "bg-base-100 hover:bg-base-300"
+				}`}
 				onPointerDown={(e) => handleInteraction(e, onModifierToggle)}
 			>
-				{getModifierLabel()}
+				{label === "Release" ? (
+					<X size={26} strokeWidth={3.5} className="text-red-600" />
+				) : (
+					<span className="text-xs font-bold">{label}</span>
+				)}
 			</button>
+		)
+	}
+
+	return (
+		<div className="flex w-full bg-base-200 border-b border-base-300 pr-1">
 			<button
 				type="button"
-				className="btn btn-sm btn-secondary"
+				className={`${baseButton} ${scrollMode ? "text-primary" : ""}`}
+				onPointerDown={(e) => handleInteraction(e, onToggleScroll)}
+			>
+				<MousePointer2 size={20} />
+			</button>
+
+			<button
+				type="button"
+				className={baseButton}
+				onPointerDown={(e) => handleInteraction(e, onLeftClick)}
+			>
+				<Mouse size={18} />
+			</button>
+
+			<button
+				type="button"
+				className={baseButton}
+				onPointerDown={(e) => handleInteraction(e, onRightClick)}
+			>
+				<Mouse size={18} className="rotate-180" />
+			</button>
+
+			<button type="button" className={baseButton}>
+				<Copy size={18} />
+			</button>
+
+			<button type="button" className={baseButton}>
+				<ClipboardPaste size={18} />
+			</button>
+
+			<button
+				type="button"
+				className={baseButton}
 				onPointerDown={(e) => handleInteraction(e, onKeyboardToggle)}
 			>
-				Keyboard
+				<Keyboard size={20} />
 			</button>
+
+			<ModifierButton />
 		</div>
 	)
 }

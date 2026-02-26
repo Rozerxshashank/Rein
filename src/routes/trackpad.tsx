@@ -1,7 +1,7 @@
 import { BufferBar } from "@/components/Trackpad/Buffer"
 import type { ModifierState } from "@/types"
 import { createFileRoute } from "@tanstack/react-router"
-import { useRef, useState } from "react"
+import { useRef, useState, useEffect } from "react"
 import { ControlBar } from "../components/Trackpad/ControlBar"
 import { ExtraKeys } from "../components/Trackpad/ExtraKeys"
 import { TouchArea } from "../components/Trackpad/TouchArea"
@@ -18,6 +18,8 @@ function TrackpadPage() {
 	const [buffer, setBuffer] = useState<string[]>([])
 	const bufferText = buffer.join(" + ")
 	const hiddenInputRef = useRef<HTMLInputElement>(null)
+	const [keyboardOpen, setKeyboardOpen] = useState(false)
+	const [extraKeysVisible, setExtraKeysVisible] = useState(true)
 
 	// Load Client Settings
 	const [sensitivity] = useState(() => {
@@ -40,6 +42,19 @@ function TrackpadPage() {
 		sensitivity,
 		invertScroll,
 	)
+
+	// When keyboardOpen changes, focus or blur the hidden input
+	useEffect(() => {
+		if (keyboardOpen) {
+			hiddenInputRef.current?.focus()
+		} else {
+			hiddenInputRef.current?.blur()
+		}
+	}, [keyboardOpen])
+
+	const toggleKeyboard = () => {
+		setKeyboardOpen((prev) => !prev)
+	}
 
 	const focusInput = () => {
 		hiddenInputRef.current?.focus()
@@ -154,56 +169,67 @@ function TrackpadPage() {
 	}
 
 	const handleModifier = (key: string) => {
+		console.log(
+			`handleModifier called with key: ${key}, current modifier: ${modifier}, buffer:`,
+			buffer,
+		)
 		if (modifier === "Hold") {
 			const comboKeys = [...buffer, key]
+			console.log("Sending combo:", comboKeys)
 			sendCombo(comboKeys)
 		} else if (modifier === "Active") {
 			setBuffer((prev) => [...prev, key])
 		}
 	}
 
-	const handleContainerClick = (e: React.MouseEvent) => {
-		if (e.target === e.currentTarget) {
-			e.preventDefault()
-			focusInput()
-		}
-	}
-
 	return (
-		// biome-ignore lint/a11y/useKeyWithClickEvents: Layout container delegates focus to hidden input, not an interactive element
-		<div
-			className="flex flex-col h-full overflow-hidden"
-			onClick={handleContainerClick}
-		>
-			{/* Touch Surface */}
-			<TouchArea
-				isTracking={isTracking}
-				scrollMode={scrollMode}
-				handlers={handlers}
-				status={status}
-			/>
-			{bufferText !== "" && <BufferBar bufferText={bufferText} />}
+		<div className="flex flex-col h-full min-h-0 bg-base-300 overflow-hidden">
+			{/* TOUCH AREA */}
+			<div className="flex-1 min-h-0 relative flex flex-col border-b border-base-200">
+				{/* Touch Surface */}
+				<TouchArea
+					isTracking={isTracking}
+					scrollMode={scrollMode}
+					handlers={handlers}
+					status={status}
+				/>
+				{bufferText !== "" && <BufferBar bufferText={bufferText} />}
+			</div>
 
-			{/* Controls */}
-			<ControlBar
-				scrollMode={scrollMode}
-				modifier={modifier}
-				buffer={buffer.join(" + ")}
-				onToggleScroll={() => setScrollMode(!scrollMode)}
-				onLeftClick={() => handleClick("left")}
-				onRightClick={() => handleClick("right")}
-				onKeyboardToggle={focusInput}
-				onModifierToggle={handleModifierState}
-			/>
+			{/* CONTROL BAR */}
+			<div className="shrink-0 border-b border-base-200">
+				<ControlBar
+					scrollMode={scrollMode}
+					modifier={modifier}
+					buffer={buffer.join(" + ")}
+					keyboardOpen={keyboardOpen}
+					extraKeysVisible={extraKeysVisible}
+					onToggleScroll={() => setScrollMode(!scrollMode)}
+					onLeftClick={() => handleClick("left")}
+					onRightClick={() => handleClick("right")}
+					onKeyboardToggle={toggleKeyboard}
+					onModifierToggle={handleModifierState}
+					onExtraKeysToggle={() => setExtraKeysVisible((prev) => !prev)}
+				/>
+			</div>
 
-			{/* Extra Keys */}
-			<ExtraKeys
-				sendKey={(k) => {
-					if (modifier !== "Release") handleModifier(k)
-					else send({ type: "key", key: k })
-				}}
-				onInputFocus={focusInput}
-			/>
+			<div
+				className={`shrink-0 overflow-hidden transition-all duration-300
+                ${
+									!extraKeysVisible || keyboardOpen
+										? "max-h-0 opacity-0 pointer-events-none"
+										: "max-h-[50vh] opacity-100"
+								}`}
+			>
+				{/* Extra Keys */}
+				<ExtraKeys
+					sendKey={(k) => {
+						if (modifier !== "Release") handleModifier(k)
+						else send({ type: "key", key: k })
+					}}
+					onInputFocus={focusInput}
+				/>
+			</div>
 
 			{/* Hidden Input for Mobile Keyboard */}
 			<input
@@ -212,9 +238,6 @@ function TrackpadPage() {
 				defaultValue=" "
 				onKeyDown={handleKeyDown}
 				onChange={handleInput}
-				onBlur={() => {
-					setTimeout(() => hiddenInputRef.current?.focus(), 10)
-				}}
 				autoComplete="off"
 				autoCorrect="off"
 				autoCapitalize="off"
