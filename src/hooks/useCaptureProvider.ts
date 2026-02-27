@@ -19,7 +19,7 @@ export function useCaptureProvider(wsRef: React.RefObject<WebSocket | null>) {
 			streamRef.current = null
 		}
 		if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-			wsRef.current.send(JSON.stringify({ type: "stop-provider" }))
+			wsRef.current.send(JSON.stringify({ type: "stop-mirror" }))
 		}
 		setIsSharing(false)
 	}, [wsRef])
@@ -57,7 +57,7 @@ export function useCaptureProvider(wsRef: React.RefObject<WebSocket | null>) {
 		// Adaptive Format/Quality: WebP is smaller, JPEG is faster to encode
 		// We use slightly lower quality (0.5) for better latency
 		const format = "image/webp"
-		const quality = 0.5
+		const quality = 1
 
 		canvas.toBlob(
 			(blob) => {
@@ -74,9 +74,9 @@ export function useCaptureProvider(wsRef: React.RefObject<WebSocket | null>) {
 		try {
 			const stream = await navigator.mediaDevices.getDisplayMedia({
 				video: {
-					frameRate: { ideal: 15 },
+					displaySurface: "monitor",
+					frameRate: { ideal: 30 },
 				},
-				audio: false,
 			})
 
 			// Create hidden video to consume the stream
@@ -121,11 +121,8 @@ export function useCaptureProvider(wsRef: React.RefObject<WebSocket | null>) {
 			if (streamRef.current) {
 				for (const track of streamRef.current.getTracks()) track.stop()
 			}
-			if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-				wsRef.current.send(JSON.stringify({ type: "stop-provider" }))
-			}
 		}
-	}, [wsRef])
+	}, [])
 
 	return {
 		isSharing,
