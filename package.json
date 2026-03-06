@@ -67,7 +67,8 @@
 		"productName": "Rein",
 		"asar": true,
 		"asarUnpack": [
-			".output/**/*"
+			".output/**/*",
+			"node_modules/@nut-tree-fork/**/*"
 		],
 		"extraResources": [
 			{
@@ -80,8 +81,7 @@
 			"electron/**/*",
 			"package.json"
 		],
-		"npmRebuild": false,
-		"nodeGypRebuild": false,
+		"npmRebuild": true,
 		"win": {
 			"target": "nsis"
 		},
