@@ -5,7 +5,7 @@ import { WebSocket, WebSocketServer } from "ws"
 import logger from "../utils/logger"
 import { InputHandler, type InputMessage } from "./InputHandler"
 import { getLocalIp } from "./getLocalIp"
-import { mirrorManager } from "./MirrorManager"
+
 
 import {
 	generateToken,
@@ -103,16 +103,14 @@ export async function createWsServer(
 
 			let lastTokenTouch = 0
 
-			const startMirror = (clientIp: string) => {
+			const startMirror = () => {
 				;(ws as ExtWebSocket).isConsumer = true
-				logger.info(`Starting mirror for ${clientIp}`)
-				mirrorManager.startMirror(clientIp, ws)
+				logger.info("Client started consuming mirror")
 			}
 
 			const stopMirror = () => {
 				;(ws as ExtWebSocket).isConsumer = false
-				logger.info("Stopping mirror")
-				mirrorManager.stopMirror()
+				logger.info("Client stopped consuming mirror")
 			}
 
 			ws.on("message", async (data: WebSocket.RawData, isBinary: boolean) => {
@@ -149,7 +147,7 @@ export async function createWsServer(
 					} else if (msg.type === "ping") {
 						ws.send(JSON.stringify({ type: "pong", timestamp: msg.timestamp }))
 					} else if (msg.type === "start-mirror") {
-						startMirror(request.socket.remoteAddress || "127.0.0.1")
+						startMirror()
 					} else if (msg.type === "stop-mirror") {
 						stopMirror()
 					} else if (msg.type === "start-provider") {
