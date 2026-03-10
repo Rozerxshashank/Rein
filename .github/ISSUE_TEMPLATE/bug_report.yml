@@ -1,0 +1,97 @@
+name: Bug Report
+description: Report a bug or unexpected behavior in Rein
+title: "[Bug]: "
+labels: ["bug", "triage"]
+
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of the bug.
+      placeholder: Describe what happened...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior.
+      placeholder: |
+        1. Open the app on '...'
+        2. Navigate to '...'
+        3. Perform action '...'
+        4. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+      placeholder: Describe what should happen...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Desktop Operating System
+      description: The OS running the Rein server
+      options:
+        - Windows 10
+        - Windows 11
+        - macOS (Intel)
+        - macOS (Apple Silicon)
+        - Linux (X11)
+        - Linux (Wayland - GNOME)
+        - Linux (Wayland - KDE)
+        - Linux (Wayland - Other)
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: client
+    attributes:
+      label: Client OS and browser
+      description: The browser and OS used to control (e.g., iOS 15 Safari, Android 15 Chrome)
+      placeholder: e.g., iOS 15 Safari, Android 15 Chrome
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Rein Version
+      description: Version of Rein (check in Settings or package.json)
+      placeholder: e.g., 1.0.0
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Console Logs / Error Messages (Optional)
+      description: Add logs from the file or web console. Leave empty if not applicable.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots / Recordings (Optional)
+      description: Add screenshots or recordings if helpful.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I have searched for existing issues to avoid duplicates
+          required: true

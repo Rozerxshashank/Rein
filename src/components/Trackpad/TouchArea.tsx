@@ -1,0 +1,51 @@
+import type React from "react"
+
+interface TouchAreaProps {
+	scrollMode: boolean
+	isTracking: boolean
+	handlers: {
+		onTouchStart: (e: React.TouchEvent) => void
+		onTouchMove: (e: React.TouchEvent) => void
+		onTouchEnd: (e: React.TouchEvent) => void
+	}
+}
+
+export const TouchArea: React.FC<TouchAreaProps> = ({
+	scrollMode,
+	isTracking,
+	handlers,
+}) => {
+	const handleStart = (e: React.TouchEvent) => {
+		handlers.onTouchStart(e)
+	}
+
+	const handlePreventFocus = (e: React.MouseEvent) => {
+		e.preventDefault()
+	}
+
+	return (
+		// biome-ignore lint/a11y/useSemanticElements: layout container intentionally not a button
+		<div
+			role="button"
+			tabIndex={0}
+			className="flex-1 bg-neutral-800 relative touch-none select-none flex items-center justify-center p-4"
+			onTouchStart={handleStart}
+			onTouchMove={handlers.onTouchMove}
+			onTouchEnd={handlers.onTouchEnd}
+			onMouseDown={handlePreventFocus}
+		>
+			<div className="text-neutral-600 text-center pointer-events-none">
+				<div className="text-4xl mb-2 opacity-20">
+					{scrollMode ? "Scroll Mode" : "Touch Area"}
+				</div>
+				{isTracking && <div className="loading loading-ring loading-lg" />}
+			</div>
+
+			{scrollMode && (
+				<div className="absolute top-4 right-4 badge badge-info">
+					SCROLL Active
+				</div>
+			)}
+		</div>
+	)
+}
