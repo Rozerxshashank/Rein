@@ -1,5 +1,6 @@
 import koffi from "koffi"
 import os from "node:os"
+import { KEY_MAP } from "./KeyMap"
 
 const platform = os.platform()
 
@@ -163,32 +164,41 @@ function createLinuxDriver(): INativeDriver {
 	let fd = -1
 	try {
 		fd = open("/dev/uinput", O_WRONLY | O_NONBLOCK)
-		if (fd >= 0) {
-			ioctl_int(fd, UI_SET_EVBIT, EV_KEY)
-			ioctl_int(fd, UI_SET_EVBIT, EV_REL)
-			ioctl_int(fd, UI_SET_EVBIT, EV_SYN)
-			ioctl_int(fd, UI_SET_KEYBIT, BTN_LEFT)
-			ioctl_int(fd, UI_SET_KEYBIT, BTN_RIGHT)
-			ioctl_int(fd, UI_SET_KEYBIT, BTN_MIDDLE)
-			ioctl_int(fd, UI_SET_RELBIT, REL_X)
-			ioctl_int(fd, UI_SET_RELBIT, REL_Y)
-			ioctl_int(fd, UI_SET_RELBIT, REL_WHEEL)
-			ioctl_int(fd, UI_SET_RELBIT, REL_HWHEEL)
-			for (let i = 1; i < 256; i++) ioctl_int(fd, UI_SET_KEYBIT, i)
-
-			const setup: any = {
-				id_bustype: 0x03,
-				id_vendor: 0x1234,
-				id_product: 0x5678,
-				id_version: 1,
-				name: Buffer.from("rein-virtual-input".padEnd(80, "\0")),
-				ff_effects_max: 0,
-			}
-			ioctl_ptr(fd, UI_DEV_SETUP, setup)
-			ioctl_int(fd, UI_DEV_CREATE, 0)
+		if (fd < 0) {
+			console.error("=== UINPUT FAILED ===")
+			console.error("Could not open /dev/uinput (permission denied)")
+			console.error("Fix: sudo usermod -aG input $USER  (then LOG OUT and log back in)")
+			console.error("=====================")
+			return createStubDriver()
 		}
+
+		ioctl_int(fd, UI_SET_EVBIT, EV_KEY)
+		ioctl_int(fd, UI_SET_EVBIT, EV_REL)
+		ioctl_int(fd, UI_SET_EVBIT, EV_SYN)
+		ioctl_int(fd, UI_SET_KEYBIT, BTN_LEFT)
+		ioctl_int(fd, UI_SET_KEYBIT, BTN_RIGHT)
+		ioctl_int(fd, UI_SET_KEYBIT, BTN_MIDDLE)
+		ioctl_int(fd, UI_SET_RELBIT, REL_X)
+		ioctl_int(fd, UI_SET_RELBIT, REL_Y)
+		ioctl_int(fd, UI_SET_RELBIT, REL_WHEEL)
+		ioctl_int(fd, UI_SET_RELBIT, REL_HWHEEL)
+		for (let i = 1; i < 256; i++) ioctl_int(fd, UI_SET_KEYBIT, i)
+
+		const setup: any = {
+			id_bustype: 0x03,
+			id_vendor: 0x1234,
+			id_product: 0x5678,
+			id_version: 1,
+			name: Buffer.from("rein-virtual-input".padEnd(80, "\0")),
+			ff_effects_max: 0,
+		}
+		ioctl_ptr(fd, UI_DEV_SETUP, setup)
+		ioctl_int(fd, UI_DEV_CREATE, 0)
+		console.log("uinput device created successfully (fd=" + fd + ")")
 	} catch (e) {
 		console.error("Failed to initialize uinput:", e)
+		console.error("Fix: sudo usermod -aG input $USER  (then LOG OUT and log back in)")
+		return createStubDriver()
 	}
 
 	const emit = (type: number, code: number, value: number) => {
@@ -211,7 +221,21 @@ function createLinuxDriver(): INativeDriver {
 		},
 		keyTap(vk) { emit(EV_KEY, vk, 1); emit(EV_KEY, vk, 0); },
 		keyToggle(vk, press) { emit(EV_KEY, vk, press ? 1 : 0); },
-		typeText(_text) { console.warn("typeText on Linux requires a keymap implementation."); },
+		typeText(text) {
+			// Type text by looking up each character in the Linux key map
+			for (const ch of text) {
+				const lower = ch.toLowerCase()
+				const code = KEY_MAP[lower]
+				if (code) {
+					// If uppercase or shifted character, hold shift
+					const needsShift = ch !== lower
+					if (needsShift && KEY_MAP.shift) emit(EV_KEY, KEY_MAP.shift, 1)
+					emit(EV_KEY, code, 1)
+					emit(EV_KEY, code, 0)
+					if (needsShift && KEY_MAP.shift) emit(EV_KEY, KEY_MAP.shift, 0)
+				}
+			}
+		},
 	}
 }
 
