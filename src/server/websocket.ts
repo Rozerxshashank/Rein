@@ -148,8 +148,20 @@ export async function createWsServer(
 						ws.send(JSON.stringify({ type: "pong", timestamp: msg.timestamp }))
 					} else if (msg.type === "start-mirror") {
 						startMirror()
+						// Relay to notify provider that a consumer joined
+						for (const client of wss.clients) {
+							if (client !== ws && client.readyState === WebSocket.OPEN) {
+								client.send(raw)
+							}
+						}
 					} else if (msg.type === "stop-mirror") {
 						stopMirror()
+						// Relay to notify provider to cleanup
+						for (const client of wss.clients) {
+							if (client !== ws && client.readyState === WebSocket.OPEN) {
+								client.send(raw)
+							}
+						}
 					} else if (msg.type === "start-provider") {
 						;(ws as ExtWebSocket).isProvider = true
 					} else if (msg.type === "webrtc-signaling") {
