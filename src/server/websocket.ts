@@ -20,10 +20,13 @@ interface ExtWebSocket extends WebSocket {
 	isProvider?: boolean
 }
 
-function isLocalhost(request: IncomingMessage): boolean {
+function isLocalhost(request: IncomingMessage, lanIp?: string): boolean {
 	const addr = request.socket.remoteAddress
 	if (!addr) return false
-	return addr === "127.0.0.1" || addr === "::1" || addr === "::ffff:127.0.0.1"
+	const local = addr === "127.0.0.1" || addr === "::1" || addr === "::ffff:127.0.0.1"
+	if (local) return true
+	if (lanIp && (addr === lanIp || addr === `::ffff:${lanIp}`)) return true
+	return false
 }
 
 export async function createWsServer(
@@ -69,7 +72,7 @@ export async function createWsServer(
 			if (url.pathname !== "/ws") return
 
 			const token = url.searchParams.get("token")
-			const local = isLocalhost(request)
+			const local = isLocalhost(request, LAN_IP)
 
 			logger.info(`Upgrade request received from ${request.socket.remoteAddress}`)
 
@@ -152,6 +155,7 @@ export async function createWsServer(
 						stopMirror()
 					} else if (msg.type === "start-provider") {
 						;(ws as ExtWebSocket).isProvider = true
+						logger.info("Client registered as screen provider")
 					} else {
 						await inputHandler.handleMessage(msg as InputMessage)
 					}
