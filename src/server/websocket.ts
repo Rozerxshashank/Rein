@@ -5,8 +5,6 @@ import { WebSocket, WebSocketServer } from "ws"
 import logger from "../utils/logger"
 import { InputHandler, type InputMessage } from "./InputHandler"
 import { getLocalIp } from "./getLocalIp"
-
-
 import {
 	generateToken,
 	getActiveToken,
@@ -62,7 +60,7 @@ export async function createWsServer(
 			logger.info(`Resolved LAN IP: ${LAN_IP}`)
 		}
 
-		const MAX_PAYLOAD_SIZE = 10 * 1024 // 10KB limit
+		const MAX_PAYLOAD_SIZE = 10 * 1024
 
 		server.on("upgrade", (request: IncomingMessage, socket: Socket, head: Buffer) => {
 			const url = new URL(request.url || "", `http://${request.headers.host}`)
@@ -148,7 +146,6 @@ export async function createWsServer(
 						ws.send(JSON.stringify({ type: "pong", timestamp: msg.timestamp }))
 					} else if (msg.type === "start-mirror") {
 						startMirror()
-						// Relay to notify provider that a consumer joined
 						for (const client of wss.clients) {
 							if (client !== ws && client.readyState === WebSocket.OPEN) {
 								client.send(raw)
@@ -156,7 +153,6 @@ export async function createWsServer(
 						}
 					} else if (msg.type === "stop-mirror") {
 						stopMirror()
-						// Relay to notify provider to cleanup
 						for (const client of wss.clients) {
 							if (client !== ws && client.readyState === WebSocket.OPEN) {
 								client.send(raw)
@@ -165,7 +161,6 @@ export async function createWsServer(
 					} else if (msg.type === "start-provider") {
 						;(ws as ExtWebSocket).isProvider = true
 					} else if (msg.type === "webrtc-signaling") {
-						// Relay signaling messages to other clients
 						for (const client of wss.clients) {
 							if (client !== ws && client.readyState === WebSocket.OPEN) {
 								client.send(JSON.stringify(msg))

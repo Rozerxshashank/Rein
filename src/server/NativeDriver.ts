@@ -13,7 +13,6 @@ export interface INativeDriver {
 	typeText(text: string): void
 }
 
-// ===================== WINDOWS IMPLEMENTATION =====================
 function createWindowsDriver(): INativeDriver {
 	const user32 = koffi.load("user32.dll")
 
@@ -111,7 +110,6 @@ function createWindowsDriver(): INativeDriver {
 	}
 }
 
-// ===================== LINUX (UINPUT) IMPLEMENTATION =====================
 function createLinuxDriver(): INativeDriver {
 	let libc: any
 	try {
@@ -239,7 +237,6 @@ function createLinuxDriver(): INativeDriver {
 	}
 }
 
-// ===================== MACOS (CORE GRAPHICS) IMPLEMENTATION =====================
 function createMacOSDriver(): INativeDriver {
 	let cg: any
 	try {
@@ -380,9 +377,6 @@ function createStubDriver(): INativeDriver {
 	}
 }
 
-// Use globalThis to cache the driver across Vite HMR reloads.
-// Without this, HMR re-imports this module, tries to re-register
-// koffi struct types, and koffi throws "Duplicate type name" errors.
 const DRIVER_KEY = "__rein_native_driver__" as const;
 
 export const getDriver = (): INativeDriver => {

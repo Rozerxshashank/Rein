@@ -35,7 +35,6 @@ export const ScreenMirror = ({
 
 	return (
 		<div className="absolute inset-0 flex items-center justify-center bg-black overflow-hidden select-none touch-none">
-			{/* Mirror Video */}
 			<video
 				ref={videoRef}
 				autoPlay
@@ -46,7 +45,6 @@ export const ScreenMirror = ({
 				}`}
 			/>
 
-			{/* Standby UI */}
 			{!hasStream && (
 				<div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 gap-4">
 					<div className="loading loading-spinner loading-lg text-primary" />
@@ -59,7 +57,6 @@ export const ScreenMirror = ({
 				</div>
 			)}
 
-			{/* Transparent Gesture Overlay */}
 			<div
 				className="absolute inset-0 z-10"
 				{...handlers}

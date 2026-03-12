@@ -28,7 +28,6 @@ export function useMirrorWebRTC(
 
 		pc.onicecandidate = (event) => {
 			if (event.candidate && wsRef.current?.readyState === WebSocket.OPEN) {
-				console.log("[WebRTC] Consumer ICE Candidate gathered");
 				wsRef.current.send(
 					JSON.stringify({
 						type: "webrtc-signaling",
@@ -62,7 +61,6 @@ export function useMirrorWebRTC(
 				const pc = pcRef.current!
 
 				if (msg.offer) {
-					console.log("[WebRTC] Consumer received OFFER");
 					await pc.setRemoteDescription(new RTCSessionDescription(msg.offer))
 					const answer = await pc.createAnswer()
 					await pc.setLocalDescription(answer)
@@ -70,10 +68,8 @@ export function useMirrorWebRTC(
 						JSON.stringify({ type: "webrtc-signaling", answer }),
 					)
 				} else if (msg.answer) {
-					console.log("[WebRTC] Consumer received ANSWER");
 					await pc.setRemoteDescription(new RTCSessionDescription(msg.answer))
 				} else if (msg.candidate) {
-					console.log("[WebRTC] Consumer received ICE Candidate");
 					await pc.addIceCandidate(new RTCIceCandidate(msg.candidate))
 				}
 			} catch (err) {
@@ -103,7 +99,6 @@ export function useMirrorWebRTC(
 		ws.addEventListener("message", onMessage)
 		setIsConnecting(true)
 		
-		// Notify provider that we are ready to consume
 		ws.send(JSON.stringify({ type: "start-mirror" }))
 
 		return () => {
