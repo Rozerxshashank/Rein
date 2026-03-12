@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react"
 
 export function useCaptureProvider(wsRef: React.RefObject<WebSocket | null>) {
 	const [isSharing, setIsSharing] = useState(false)
-	const [error, setError] = useState<string | null>(null)
 	const videoRef = useRef<HTMLVideoElement | null>(null)
 	const canvasRef = useRef<HTMLCanvasElement | null>(null)
 	const streamRef = useRef<MediaStream | null>(null)
@@ -72,7 +71,6 @@ export function useCaptureProvider(wsRef: React.RefObject<WebSocket | null>) {
 	}, [wsRef])
 
 	const startSharing = useCallback(async () => {
-		setError(null)
 		try {
 			const stream = await navigator.mediaDevices.getDisplayMedia({
 				video: {
@@ -119,7 +117,6 @@ export function useCaptureProvider(wsRef: React.RefObject<WebSocket | null>) {
 			}
 		} catch (err) {
 			console.error("Failed to start screen capture:", err)
-			setError(err instanceof Error ? err.message : String(err))
 			setIsSharing(false)
 		}
 	}, [wsRef, captureFrame, stopSharing])
@@ -138,7 +135,6 @@ export function useCaptureProvider(wsRef: React.RefObject<WebSocket | null>) {
 
 	return {
 		isSharing,
-		error,
 		startSharing,
 		stopSharing,
 	}
