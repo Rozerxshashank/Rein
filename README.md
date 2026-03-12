@@ -1,13 +1,3 @@
-<div align="center">
-    <span>
-        <img src="public/app_icon/IconBg.png" width="128" height="128" alt="IconBg" />
-        <img src="https://github.com/user-attachments/assets/7f9e9c71-0714-4af7-9191-d3f7184b7193" width="128" height="128" alt="aossie_logo" />
-    </span>
-</div>
-
-# Rein
-
-A cross-platform, low-latency remote control based on the **KISS principle**. Turn your phone into a wireless trackpad, keyboard, and WebRTC-powered screen mirror for your computer.
 
 ## Tech Stack
 
@@ -75,9 +65,3 @@ If you are on a restricted network (like a University or Office) where devices c
 | **"Negotiating..." stuck** | Ensure both devices are on the same Tailscale or WiFi network. |
 | **Input not working (Linux)** | Verify `ls -l /dev/uinput` shows `input` group ownership. |
 | **Mirror black screen** | Ensure "Screen Recording" permission is granted to your browser. |
-
-Visit the [Discord Channel](https://discord.com/invite/C8wHmwtczs) for support!  
-(Go to Project -> Rein)
-
----
-> Contributions are welcome! Please leave a star ⭐ to show your support.
