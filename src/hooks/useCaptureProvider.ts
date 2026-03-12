@@ -4,137 +4,149 @@ import { useCallback, useEffect, useRef, useState } from "react"
 
 export function useCaptureProvider(wsRef: React.RefObject<WebSocket | null>) {
 	const [isSharing, setIsSharing] = useState(false)
-	const videoRef = useRef<HTMLVideoElement | null>(null)
-	const canvasRef = useRef<HTMLCanvasElement | null>(null)
+	const [error, setError] = useState<string | null>(null)
 	const streamRef = useRef<MediaStream | null>(null)
-	const workerRef = useRef<Worker | null>(null)
+	const pcRef = useRef<RTCPeerConnection | null>(null)
 
-	const stopSharing = useCallback(() => {
-		// Stop the worker timer
-		if (workerRef.current) {
-			workerRef.current.postMessage({ type: "stop" })
-			workerRef.current.terminate()
-			workerRef.current = null
+	const cleanup = useCallback(() => {
+		if (pcRef.current) {
+			pcRef.current.close()
+			pcRef.current = null
 		}
 		if (streamRef.current) {
 			for (const track of streamRef.current.getTracks()) track.stop()
 			streamRef.current = null
 		}
+		setIsSharing(false)
+	}, [])
+
+	const stopSharing = useCallback(() => {
+		cleanup()
 		if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
 			wsRef.current.send(JSON.stringify({ type: "stop-mirror" }))
 		}
-		setIsSharing(false)
+	}, [wsRef, cleanup])
+
+	const createPeerConnection = useCallback(() => {
+		if (pcRef.current) pcRef.current.close()
+
+		const pc = new RTCPeerConnection({
+			iceServers: [{ urls: "stun:stun1.l.google.com:19302" }],
+		})
+
+		pc.onicecandidate = (event) => {
+			if (event.candidate && wsRef.current?.readyState === WebSocket.OPEN) {
+				wsRef.current.send(
+					JSON.stringify({
+						type: "webrtc-signaling",
+						candidate: event.candidate,
+					}),
+				)
+			}
+		}
+
+		if (streamRef.current) {
+			for (const track of streamRef.current.getTracks()) {
+				pc.addTrack(track, streamRef.current)
+			}
+		}
+
+		pcRef.current = pc
+		return pc
 	}, [wsRef])
 
-	const captureFrame = useCallback(() => {
-		if (!videoRef.current || !canvasRef.current || !wsRef.current) return
-		if (wsRef.current.readyState !== WebSocket.OPEN) return
+	const handleSignaling = useCallback(
+		async (msg: any) => {
+			if (!pcRef.current) return
 
-		// Backpressure: Skip frame if buffer is filling up (> 1MB)
-		if (wsRef.current.bufferedAmount > 1024 * 1024) return
-
-		const video = videoRef.current
-		const canvas = canvasRef.current
-		const ctx = canvas.getContext("2d", { alpha: false })
-		if (!ctx) return
-
-		// Cap resolution to 720p
-		const MAX_DIM = 1280
-		let width = video.videoWidth
-		let height = video.videoHeight
-
-		if (width > MAX_DIM || height > MAX_DIM) {
-			const ratio = Math.min(MAX_DIM / width, MAX_DIM / height)
-			width = Math.floor(width * ratio)
-			height = Math.floor(height * ratio)
-		}
-
-		if (canvas.width !== width || canvas.height !== height) {
-			canvas.width = width
-			canvas.height = height
-		}
-
-		ctx.drawImage(video, 0, 0, width, height)
-
-		const format = "image/webp"
-		const quality = 1
-
-		canvas.toBlob(
-			(blob) => {
-				if (blob && wsRef.current?.readyState === WebSocket.OPEN) {
-					wsRef.current.send(blob)
+			try {
+				if (msg.offer) {
+					await pcRef.current.setRemoteDescription(
+						new RTCSessionDescription(msg.offer),
+					)
+					const answer = await pcRef.current.createAnswer()
+					await pcRef.current.setLocalDescription(answer)
+					wsRef.current?.send(
+						JSON.stringify({ type: "webrtc-signaling", answer }),
+					)
+				} else if (msg.answer) {
+					await pcRef.current.setRemoteDescription(
+						new RTCSessionDescription(msg.answer),
+					)
+				} else if (msg.candidate) {
+					await pcRef.current.addIceCandidate(new RTCIceCandidate(msg.candidate))
 				}
-			},
-			format,
-			quality,
-		)
-	}, [wsRef])
+			} catch (err) {
+				console.error("WebRTC signaling error:", err)
+			}
+		},
+		[wsRef],
+	)
 
 	const startSharing = useCallback(async () => {
+		setError(null)
 		try {
 			const stream = await navigator.mediaDevices.getDisplayMedia({
 				video: {
 					displaySurface: "monitor",
+					frameRate: { ideal: 60 },
 				},
 			})
-
-			// Create hidden video to consume the stream
-			if (!videoRef.current) {
-				videoRef.current = document.createElement("video")
-				videoRef.current.muted = true
-				videoRef.current.playsInline = true
-			}
-
-			// Create hidden canvas for capturing frames
-			if (!canvasRef.current) {
-				canvasRef.current = document.createElement("canvas")
-			}
-
-			const video = videoRef.current
-			video.srcObject = stream
-			await video.play()
 
 			streamRef.current = stream
 			setIsSharing(true)
 
+			// Notify server we are a provider
 			if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
 				wsRef.current.send(JSON.stringify({ type: "start-provider" }))
 			}
 
-			// Use a Web Worker timer instead of setInterval.
-			// Worker timers are NOT throttled by the browser when the tab
-			// is in the background, solving the tab-switching latency issue.
-			const worker = new Worker("/capture-timer-worker.js")
-			workerRef.current = worker
-			worker.onmessage = () => {
-				captureFrame()
-			}
-			worker.postMessage({ type: "start", interval: 80 })
+			// Create PC and wait for offers from consumers
+			createPeerConnection()
 
-			// Handle stream termination (e.g. user clicks "Stop Sharing")
 			stream.getVideoTracks()[0].onended = () => {
 				stopSharing()
 			}
 		} catch (err) {
 			console.error("Failed to start screen capture:", err)
+			setError(err instanceof Error ? err.message : String(err))
 			setIsSharing(false)
 		}
-	}, [wsRef, captureFrame, stopSharing])
+	}, [wsRef, createPeerConnection, stopSharing])
 
 	useEffect(() => {
-		return () => {
-			if (workerRef.current) {
-				workerRef.current.postMessage({ type: "stop" })
-				workerRef.current.terminate()
-			}
-			if (streamRef.current) {
-				for (const track of streamRef.current.getTracks()) track.stop()
-			}
+		const ws = wsRef.current
+		if (!ws) return
+
+		const onMessage = (event: MessageEvent) => {
+			try {
+				const msg = JSON.parse(event.data)
+				if (msg.type === "webrtc-signaling") {
+					handleSignaling(msg)
+				} else if (msg.type === "start-mirror" && isSharing) {
+					// Consumer joined, restart PC to ensure they get the stream
+					createPeerConnection()
+					const pc = pcRef.current
+					if (pc) {
+						pc.createOffer().then((offer) => {
+							pc.setLocalDescription(offer)
+							ws.send(JSON.stringify({ type: "webrtc-signaling", offer }))
+						})
+					}
+				}
+			} catch {}
 		}
-	}, [])
+
+		ws.addEventListener("message", onMessage)
+		return () => {
+			ws.removeEventListener("message", onMessage)
+			cleanup()
+		}
+	}, [wsRef, handleSignaling, isSharing, createPeerConnection, cleanup])
 
 	return {
 		isSharing,
+		error,
 		startSharing,
 		stopSharing,
 	}

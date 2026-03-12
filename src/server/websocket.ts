@@ -152,6 +152,13 @@ export async function createWsServer(
 						stopMirror()
 					} else if (msg.type === "start-provider") {
 						;(ws as ExtWebSocket).isProvider = true
+					} else if (msg.type === "webrtc-signaling") {
+						// Relay signaling messages to other clients
+						for (const client of wss.clients) {
+							if (client !== ws && client.readyState === WebSocket.OPEN) {
+								client.send(JSON.stringify(msg))
+							}
+						}
 					} else {
 						await inputHandler.handleMessage(msg as InputMessage)
 					}
