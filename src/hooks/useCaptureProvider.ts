@@ -36,6 +36,7 @@ export function useCaptureProvider(wsRef: React.RefObject<WebSocket | null>) {
 
 		pc.onicecandidate = (event) => {
 			if (event.candidate && wsRef.current?.readyState === WebSocket.OPEN) {
+				console.log("[WebRTC] Provider ICE Candidate gathered");
 				wsRef.current.send(
 					JSON.stringify({
 						type: "webrtc-signaling",
@@ -70,10 +71,12 @@ export function useCaptureProvider(wsRef: React.RefObject<WebSocket | null>) {
 						JSON.stringify({ type: "webrtc-signaling", answer }),
 					)
 				} else if (msg.answer) {
+					console.log("[WebRTC] Provider received ANSWER");
 					await pcRef.current.setRemoteDescription(
 						new RTCSessionDescription(msg.answer),
 					)
 				} else if (msg.candidate) {
+					console.log("[WebRTC] Provider received ICE Candidate");
 					await pcRef.current.addIceCandidate(new RTCIceCandidate(msg.candidate))
 				}
 			} catch (err) {
@@ -128,6 +131,7 @@ export function useCaptureProvider(wsRef: React.RefObject<WebSocket | null>) {
 					createPeerConnection()
 					const pc = pcRef.current
 					if (pc) {
+						console.log("[WebRTC] Consumer joined, creating OFFER");
 						pc.createOffer().then((offer) => {
 							pc.setLocalDescription(offer)
 							ws.send(JSON.stringify({ type: "webrtc-signaling", offer }))
