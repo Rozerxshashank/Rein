@@ -9,8 +9,6 @@ export function useMirrorWebRTC(
 	const [stream, setStream] = useState<MediaStream | null>(null)
 	const [isConnecting, setIsConnecting] = useState(false)
 	const pcRef = useRef<RTCPeerConnection | null>(null)
-	const providerIdRef = useRef<string | null>(null)
-	const myIdRef = useRef<string | null>(null)
 
 	const cleanup = useCallback(() => {
 		if (pcRef.current) {
@@ -19,7 +17,6 @@ export function useMirrorWebRTC(
 		}
 		setStream(null)
 		setIsConnecting(false)
-		providerIdRef.current = null
 	}, [])
 
 	const createPeerConnection = useCallback(() => {
@@ -30,12 +27,11 @@ export function useMirrorWebRTC(
 		})
 
 		pc.onicecandidate = (event) => {
-			if (event.candidate && wsRef.current?.readyState === WebSocket.OPEN && providerIdRef.current) {
+			if (event.candidate && wsRef.current?.readyState === WebSocket.OPEN) {
 				console.log("[WebRTC] Consumer ICE Candidate gathered");
 				wsRef.current.send(
 					JSON.stringify({
 						type: "webrtc-signaling",
-						target: providerIdRef.current,
 						candidate: event.candidate,
 					}),
 				)
@@ -44,14 +40,12 @@ export function useMirrorWebRTC(
 
 		pc.ontrack = (event) => {
 			if (event.streams && event.streams[0]) {
-				console.log("[WebRTC] Consumer received remote track");
 				setStream(event.streams[0])
 				setIsConnecting(false)
 			}
 		}
 
 		pc.oniceconnectionstatechange = () => {
-			console.log(`[WebRTC] ICE Connection State: ${pc.iceConnectionState}`);
 			if (pc.iceConnectionState === "disconnected" || pc.iceConnectionState === "failed") {
 				cleanup()
 			}
@@ -64,22 +58,23 @@ export function useMirrorWebRTC(
 	const handleSignaling = useCallback(
 		async (msg: any) => {
 			try {
+				if (!pcRef.current) createPeerConnection()
+				const pc = pcRef.current!
+
 				if (msg.offer) {
-					console.log(`[WebRTC] Consumer received OFFER from ${msg.from}`);
-					providerIdRef.current = msg.from
-					const pc = createPeerConnection()
+					console.log("[WebRTC] Consumer received OFFER");
 					await pc.setRemoteDescription(new RTCSessionDescription(msg.offer))
 					const answer = await pc.createAnswer()
 					await pc.setLocalDescription(answer)
 					wsRef.current?.send(
-						JSON.stringify({ type: "webrtc-signaling", target: msg.from, answer }),
+						JSON.stringify({ type: "webrtc-signaling", answer }),
 					)
 				} else if (msg.answer) {
-					console.log(`[WebRTC] Consumer received ANSWER from ${msg.from}`);
-					if (pcRef.current) await pcRef.current.setRemoteDescription(new RTCSessionDescription(msg.answer))
+					console.log("[WebRTC] Consumer received ANSWER");
+					await pc.setRemoteDescription(new RTCSessionDescription(msg.answer))
 				} else if (msg.candidate) {
-					console.log(`[WebRTC] Consumer received ICE Candidate from ${msg.from}`);
-					if (pcRef.current) await pcRef.current.addIceCandidate(new RTCIceCandidate(msg.candidate))
+					console.log("[WebRTC] Consumer received ICE Candidate");
+					await pc.addIceCandidate(new RTCIceCandidate(msg.candidate))
 				}
 			} catch (err) {
 				console.error("Consumer WebRTC signaling error:", err)
@@ -96,12 +91,10 @@ export function useMirrorWebRTC(
 		}
 
 		const onMessage = (event: MessageEvent) => {
-			if (typeof event.data !== "string") return
 			try {
+				if (typeof event.data !== "string") return
 				const msg = JSON.parse(event.data)
-				if (msg.type === "connected") {
-					myIdRef.current = msg.clientId;
-				} else if (msg.type === "webrtc-signaling") {
+				if (msg.type === "webrtc-signaling") {
 					handleSignaling(msg)
 				}
 			} catch {}
@@ -111,7 +104,6 @@ export function useMirrorWebRTC(
 		setIsConnecting(true)
 		
 		// Notify provider that we are ready to consume
-		console.log("[WebRTC] Sending start-mirror to provider...");
 		ws.send(JSON.stringify({ type: "start-mirror" }))
 
 		return () => {

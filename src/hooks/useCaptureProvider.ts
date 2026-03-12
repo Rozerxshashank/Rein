@@ -6,36 +6,29 @@ export function useCaptureProvider(wsRef: React.RefObject<WebSocket | null>) {
 	const [isSharing, setIsSharing] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 	const streamRef = useRef<MediaStream | null>(null)
-	const pcsRef = useRef<Record<string, RTCPeerConnection>>({})
-	const myIdRef = useRef<string | null>(null);
+	const pcRef = useRef<RTCPeerConnection | null>(null)
 
-	const cleanupPeer = useCallback((id: string) => {
-		if (pcsRef.current[id]) {
-			pcsRef.current[id].close()
-			delete pcsRef.current[id]
-		}
-	}, [])
-
-	const cleanupAll = useCallback(() => {
-		for (const id in pcsRef.current) {
-			cleanupPeer(id)
+	const cleanup = useCallback(() => {
+		if (pcRef.current) {
+			pcRef.current.close()
+			pcRef.current = null
 		}
 		if (streamRef.current) {
 			for (const track of streamRef.current.getTracks()) track.stop()
 			streamRef.current = null
 		}
 		setIsSharing(false)
-	}, [cleanupPeer])
+	}, [])
 
 	const stopSharing = useCallback(() => {
-		cleanupAll()
+		cleanup()
 		if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
 			wsRef.current.send(JSON.stringify({ type: "stop-mirror" }))
 		}
-	}, [wsRef, cleanupAll])
+	}, [wsRef, cleanup])
 
-	const createPeerConnection = useCallback((targetId: string) => {
-		cleanupPeer(targetId)
+	const createPeerConnection = useCallback(() => {
+		if (pcRef.current) pcRef.current.close()
 
 		const pc = new RTCPeerConnection({
 			iceServers: [{ urls: "stun:stun1.l.google.com:19302" }],
@@ -43,11 +36,10 @@ export function useCaptureProvider(wsRef: React.RefObject<WebSocket | null>) {
 
 		pc.onicecandidate = (event) => {
 			if (event.candidate && wsRef.current?.readyState === WebSocket.OPEN) {
-				console.log(`[WebRTC] Provider ICE Candidate gathered for ${targetId}`);
+				console.log("[WebRTC] Provider ICE Candidate gathered");
 				wsRef.current.send(
 					JSON.stringify({
 						type: "webrtc-signaling",
-						target: targetId,
 						candidate: event.candidate,
 					}),
 				)
@@ -60,39 +52,35 @@ export function useCaptureProvider(wsRef: React.RefObject<WebSocket | null>) {
 			}
 		}
 
-		pcsRef.current[targetId] = pc
+		pcRef.current = pc
 		return pc
-	}, [wsRef, cleanupPeer])
+	}, [wsRef])
 
 	const handleSignaling = useCallback(
 		async (msg: any) => {
-			const targetId = msg.from
-			if (!targetId) return
-
-			let pc = pcsRef.current[targetId]
-			if (!pc) {
-				console.log(`[WebRTC] Received signaling for unknown peer ${targetId}, ignoring.`);
-				return
-			}
+			if (!pcRef.current) return
 
 			try {
 				if (msg.offer) {
-					console.log(`[WebRTC] Provider received OFFER from ${targetId}`);
-					await pc.setRemoteDescription(new RTCSessionDescription(msg.offer))
-					const answer = await pc.createAnswer()
-					await pc.setLocalDescription(answer)
+					await pcRef.current.setRemoteDescription(
+						new RTCSessionDescription(msg.offer),
+					)
+					const answer = await pcRef.current.createAnswer()
+					await pcRef.current.setLocalDescription(answer)
 					wsRef.current?.send(
-						JSON.stringify({ type: "webrtc-signaling", target: targetId, answer }),
+						JSON.stringify({ type: "webrtc-signaling", answer }),
 					)
 				} else if (msg.answer) {
-					console.log(`[WebRTC] Provider received ANSWER from ${targetId}`);
-					await pc.setRemoteDescription(new RTCSessionDescription(msg.answer))
+					console.log("[WebRTC] Provider received ANSWER");
+					await pcRef.current.setRemoteDescription(
+						new RTCSessionDescription(msg.answer),
+					)
 				} else if (msg.candidate) {
-					console.log(`[WebRTC] Provider received ICE Candidate from ${targetId}`);
-					await pc.addIceCandidate(new RTCIceCandidate(msg.candidate))
+					console.log("[WebRTC] Provider received ICE Candidate");
+					await pcRef.current.addIceCandidate(new RTCIceCandidate(msg.candidate))
 				}
 			} catch (err) {
-				console.error(`WebRTC signaling error for ${targetId}:`, err)
+				console.error("WebRTC signaling error:", err)
 			}
 		},
 		[wsRef],
@@ -111,9 +99,13 @@ export function useCaptureProvider(wsRef: React.RefObject<WebSocket | null>) {
 			streamRef.current = stream
 			setIsSharing(true)
 
+			// Notify server we are a provider
 			if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
 				wsRef.current.send(JSON.stringify({ type: "start-provider" }))
 			}
+
+			// Create PC and wait for offers from consumers
+			createPeerConnection()
 
 			stream.getVideoTracks()[0].onended = () => {
 				stopSharing()
@@ -123,32 +115,28 @@ export function useCaptureProvider(wsRef: React.RefObject<WebSocket | null>) {
 			setError(err instanceof Error ? err.message : String(err))
 			setIsSharing(false)
 		}
-	}, [wsRef, stopSharing])
+	}, [wsRef, createPeerConnection, stopSharing])
 
 	useEffect(() => {
 		const ws = wsRef.current
 		if (!ws) return
 
 		const onMessage = (event: MessageEvent) => {
-			if (typeof event.data !== "string") return
 			try {
 				const msg = JSON.parse(event.data)
-				if (msg.type === "connected") {
-					myIdRef.current = msg.clientId;
-				} else if (msg.type === "webrtc-signaling") {
+				if (msg.type === "webrtc-signaling") {
 					handleSignaling(msg)
 				} else if (msg.type === "start-mirror" && isSharing) {
-					const consumerId = msg.from
-					if (!consumerId) return
-
-					console.log(`[WebRTC] Consumer ${consumerId} joined, creating OFFER`);
-					const pc = createPeerConnection(consumerId)
-					pc.createOffer().then((offer) => {
-						pc.setLocalDescription(offer)
-						ws.send(JSON.stringify({ type: "webrtc-signaling", target: consumerId, offer }))
-					})
-				} else if (msg.type === "stop-mirror") {
-					if (msg.from) cleanupPeer(msg.from)
+					// Consumer joined, restart PC to ensure they get the stream
+					createPeerConnection()
+					const pc = pcRef.current
+					if (pc) {
+						console.log("[WebRTC] Consumer joined, creating OFFER");
+						pc.createOffer().then((offer) => {
+							pc.setLocalDescription(offer)
+							ws.send(JSON.stringify({ type: "webrtc-signaling", offer }))
+						})
+					}
 				}
 			} catch {}
 		}
@@ -156,9 +144,9 @@ export function useCaptureProvider(wsRef: React.RefObject<WebSocket | null>) {
 		ws.addEventListener("message", onMessage)
 		return () => {
 			ws.removeEventListener("message", onMessage)
-			cleanupAll()
+			cleanup()
 		}
-	}, [wsRef, handleSignaling, isSharing, createPeerConnection, cleanupAll, cleanupPeer])
+	}, [wsRef, handleSignaling, isSharing, createPeerConnection, cleanup])
 
 	return {
 		isSharing,

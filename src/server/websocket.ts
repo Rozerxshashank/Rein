@@ -18,7 +18,6 @@ import {
 interface ExtWebSocket extends WebSocket {
 	isConsumer?: boolean
 	isProvider?: boolean
-	id: string
 }
 
 function isLocalhost(request: IncomingMessage): boolean {
@@ -94,15 +93,13 @@ export async function createWsServer(
 		})
 
 		wss.on("connection", (ws: WebSocket, request: IncomingMessage, token: string | null, isLocal: boolean) => {
-			const clientId = Math.random().toString(36).substring(2, 10)
-			;(ws as ExtWebSocket).id = clientId
-			logger.info(`Client connected from ${request.socket.remoteAddress} (id: ${clientId})`)
+			logger.info(`Client connected from ${request.socket.remoteAddress}`)
 
 			if (token && (isKnownToken(token) || !isLocal)) {
 				storeToken(token)
 			}
 
-			ws.send(JSON.stringify({ type: "connected", serverIp: LAN_IP, clientId }))
+			ws.send(JSON.stringify({ type: "connected", serverIp: LAN_IP }))
 
 			let lastTokenTouch = 0
 
@@ -168,13 +165,10 @@ export async function createWsServer(
 					} else if (msg.type === "start-provider") {
 						;(ws as ExtWebSocket).isProvider = true
 					} else if (msg.type === "webrtc-signaling") {
-						// Relay signaling messages to specific client if target is provided, else broadcast
+						// Relay signaling messages to other clients
 						for (const client of wss.clients) {
-							const extClient = client as ExtWebSocket
-							if (extClient !== ws && extClient.readyState === WebSocket.OPEN) {
-								if (!msg.target || extClient.id === msg.target) {
-									extClient.send(JSON.stringify({ ...msg, from: (ws as ExtWebSocket).id }))
-								}
+							if (client !== ws && client.readyState === WebSocket.OPEN) {
+								client.send(JSON.stringify(msg))
 							}
 						}
 					} else {
