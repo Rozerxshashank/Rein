@@ -1,161 +1,83 @@
-# Rein — Low-Latency Remote Input & Screen Mirror
+<div align="center">
+    <span>
+        <img src="public/app_icon/IconBg.png" width="128" height="128" alt="IconBg" />
+        <img src="https://github.com/user-attachments/assets/7f9e9c71-0714-4af7-9191-d3f7184b7193" width="128" height="128" alt="aossie_logo" />
+    </span>
+</div>
 
-Turn your phone into a wireless trackpad, keyboard, and screen viewer for your computer. Works on **Windows**, **Linux (including Wayland)**, and **macOS**.
+# Rein
 
-## Features
+A cross-platform, low-latency remote control based on the **KISS principle**. Turn your phone into a wireless trackpad, keyboard, and WebRTC-powered screen mirror for your computer.
 
-- 🖱️ **Trackpad** — Move cursor, click, scroll, and zoom from your phone
-- ⌨️ **Keyboard** — Type text and send key shortcuts remotely
-- 🖥️ **Screen Mirror** — See your computer screen on your phone in real-time
-- 🔒 **Token Auth** — Secure connections with auto-generated tokens
-- 📱 **PWA Ready** — Install as an app on your phone via the browser
+## Tech Stack
 
-## Architecture
-
-```
-Phone (Browser)                     Host Computer (Node.js)
-┌──────────────┐                    ┌──────────────────────┐
-│  Trackpad UI │──── WebSocket ────▶│  InputHandler        │
-│  Keyboard UI │    (JSON msgs)     │    ↓                 │
-│              │                    │  NativeDriver (koffi)│
-│  Mirror View │◀── WebSocket ─────│    ↓                 │
-│  (Canvas)    │   (binary blobs)   │  OS API calls        │
-└──────────────┘                    └──────────────────────┘
-```
-
-**Input:** Phone → WebSocket → InputHandler → NativeDriver (koffi FFI) → OS  
-**Mirror:** OS Screen → Browser getDisplayMedia → WebSocket → Phone Canvas
-
-## Prerequisites
-
-| Requirement | Windows | Linux | macOS |
-|---|---|---|---|
-| **Node.js** | ≥ 18 | ≥ 18 | ≥ 18 |
-| **npm** | ✅ bundled | ✅ bundled | ✅ bundled |
-| **Permissions** | None | `input` group for `/dev/uinput` | Accessibility permission |
+- **Framework**: [Vite](https://vitejs.dev/) + [TanStack Router](https://tanstack.com/router)
+- **Real-time**: Native WebRTC (Peer-to-Peer) & WebSockets
+- **Native Input**: [Koffi FFI](https://koffi.dev/) (C++ integration for Win/Linux/macOS)
 
 ## Setup
 
-### 1. Clone & Install
+### 1. Build & Install
 
 ```bash
 git clone https://github.com/Rozerxshashank/reinimprovevd.git
 cd reinimprovevd
 npm install
+npm run dev
 ```
 
 ### 2. Platform-Specific Setup
 
 #### Windows
-No extra setup needed. `koffi` loads `user32.dll` automatically.
+No extra configuration required.
 
 #### Linux (X11 & Wayland)
-Add your user to the `input` group for cursor/keyboard injection:
-
-```bash
-sudo usermod -aG input $USER
-# Log out and log back in for this to take effect
-```
-
-Verify access:
-```bash
-ls -la /dev/uinput
-# Should show: crw-rw---- 1 root input ...
-```
+1. Add yourself to the input group:
+   ```bash
+   sudo usermod -aG input $USER
+   ```
+2. Set up uinput permissions:
+   ```bash
+   echo 'KERNEL=="uinput", GROUP="input", MODE="0660"' | sudo tee /etc/udev/rules.d/99-uinput.rules
+   sudo udevadm control --reload-rules && sudo udevadm trigger
+   sudo modprobe uinput
+   ```
+3. **Log out and log back in.**
 
 #### macOS
-Grant **Accessibility** permission to your terminal/IDE:
+Grant **Accessibility** permission to your terminal/IDE in **System Settings → Privacy & Security → Accessibility**.
 
-1. Go to **System Settings → Privacy & Security → Accessibility**
-2. Add **Terminal** (or your IDE) to the allowed list
+## Connecting Different Devices
 
-For screen mirroring, also grant **Screen Recording** permission:
+### Same Network (WiFi)
+1. Open `http://localhost:3000` on your PC.
+2. Scan the QR code with your phone.
 
-1. Go to **System Settings → Privacy & Security → Screen Recording**
-2. Add your **browser** (Chrome/Safari/Firefox)
+### Different Networks / Restrictive WiFi (Tailscale)
+If you are on a restricted network (like a University or Office) where devices can't "see" each other, use **Tailscale**:
 
-## Running
+1. Install [Tailscale](https://tailscale.com/download) on your PC and Phone.
+2. Log in on both devices.
+3. Open the app on your PC.
+4. On your phone, enter the **Tailscale IP** of your PC (e.g., `100.x.x.x:3000`) in the browser.
 
-### Development (recommended)
+## How to Use
 
-```bash
-npm run dev
-```
-
-This starts the Vite dev server with hot-reload. Open `http://localhost:3000` on your computer.
-
-### Using from your Phone
-
-1. Make sure your phone and computer are on the **same WiFi network**
-2. On your computer, open `http://localhost:3000/settings`
-3. Note the **Server IP** shown (e.g., `192.168.1.42`)
-4. On your phone browser, go to `http://<server-ip>:3000/trackpad`
-5. The screen share popup will appear on your computer — select your screen
-6. Start using the trackpad on your phone!
-
-### Electron App (optional)
-
-```bash
-npm run electron-dev
-```
-
-### Production Build
-
-```bash
-npm run build
-```
-
-## Configuration
-
-Edit `src/server-config.json`:
-
-```json
-{
-  "host": "0.0.0.0",
-  "frontendPort": 3000,
-  "inputThrottleMs": 8
-}
-```
-
-| Key | Description | Default |
-|---|---|---|
-| `host` | Bind address (`0.0.0.0` = all interfaces) | `0.0.0.0` |
-| `frontendPort` | HTTP/WebSocket port | `3000` |
-| `inputThrottleMs` | Min ms between input events | `8` |
-
-## Project Structure
-
-```
-src/
-├── server/
-│   ├── websocket.ts        # WebSocket server & message routing
-│   ├── NativeDriver.ts     # Koffi FFI input drivers (Win/Linux/macOS)
-│   ├── InputHandler.ts     # Input throttling & dispatch
-│   ├── KeyMap.ts           # Platform-specific key code maps
-│   ├── getLocalIp.ts       # LAN IP resolution
-│   └── tokenStore.ts       # Auth token management
-├── hooks/
-│   ├── useCaptureProvider.ts  # Screen capture (Worker-based timer)
-│   └── useMirrorStream.ts    # Mirror frame consumer
-├── components/
-│   └── Trackpad/
-│       └── ScreenMirror.tsx   # Mirror canvas UI
-└── routes/
-    ├── __root.tsx           # App root with auto-capture
-    ├── trackpad.tsx         # Trackpad page
-    └── settings.tsx         # Settings page
-```
+1. **Start Server**: Run `npm run dev` on your computer.
+2. **Connect Phone**: Use the QR code or URL.
+3. **Mirror Screen**: Click **"Start Screen Mirror"** on your PC and select your screen.
+4. **Control**: Use your phone screen as a trackpad. Toggle the **Keyboard** icon to type.
 
 ## Troubleshooting
 
 | Issue | Solution |
 |---|---|
-| **Input not working (Linux)** | Run `sudo usermod -aG input $USER` and re-login |
-| **Input not working (macOS)** | Grant Accessibility permission in System Settings |
-| **Screen mirror black** | Grant Screen Recording permission to your browser |
-| **Port already in use** | Kill zombie processes: `taskkill /F /IM node.exe /T` (Win) or `killall node` (Linux/macOS) |
-| **High latency on tab switch** | This is expected — frame capture runs in a Web Worker to minimize throttling |
+| **"Negotiating..." stuck** | Ensure both devices are on the same Tailscale or WiFi network. |
+| **Input not working (Linux)** | Verify `ls -l /dev/uinput` shows `input` group ownership. |
+| **Mirror black screen** | Ensure "Screen Recording" permission is granted to your browser. |
 
-## License
+Visit the [Discord Channel](https://discord.com/invite/C8wHmwtczs) for support!  
+(Go to Project -> Rein)
 
-See [LICENSE](./LICENSE) for details.
+---
+> Contributions are welcome! Please leave a star ⭐ to show your support.
