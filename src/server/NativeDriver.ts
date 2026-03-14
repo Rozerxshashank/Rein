@@ -220,12 +220,10 @@ function createLinuxDriver(): INativeDriver {
 		keyTap(vk) { emit(EV_KEY, vk, 1); emit(EV_KEY, vk, 0); },
 		keyToggle(vk, press) { emit(EV_KEY, vk, press ? 1 : 0); },
 		typeText(text) {
-			// Type text by looking up each character in the Linux key map
 			for (const ch of text) {
 				const lower = ch.toLowerCase()
 				const code = KEY_MAP[lower]
 				if (code) {
-					// If uppercase or shifted character, hold shift
 					const needsShift = ch !== lower
 					if (needsShift && KEY_MAP.shift) emit(EV_KEY, KEY_MAP.shift, 1)
 					emit(EV_KEY, code, 1)
@@ -246,7 +244,6 @@ function createMacOSDriver(): INativeDriver {
 		return createStubDriver()
 	}
 
-	// CGEvent types
 	const kCGEventMouseMoved = 5
 	const kCGEventLeftMouseDown = 1
 	const kCGEventLeftMouseUp = 2
@@ -256,18 +253,15 @@ function createMacOSDriver(): INativeDriver {
 	const kCGEventOtherMouseUp = 26
 
 
-	// CGEventSource state
 	const kCGEventSourceStateHIDSystemState = 1
 
 	const kCGScrollEventUnitPixel = 1
 
-	// CGPoint struct - note: macOS uses double for CGFloat on 64-bit
 	const CGPoint = koffi.struct("CGPoint", {
 		x: "double",
 		y: "double",
 	})
 
-	// Function signatures
 	const CGEventSourceCreate = cg.func("void* CGEventSourceCreate(int32_t stateID)")
 	const CGEventCreateMouseEvent = cg.func(
 		"void* CGEventCreateMouseEvent(void* source, int32_t mouseType, CGPoint mouseCursorPosition, int32_t mouseButton)"
@@ -285,7 +279,6 @@ function createMacOSDriver(): INativeDriver {
 
 	const kCGHIDEventTap = 0
 
-	// Helper: get current mouse position
 	const getMousePos = (): { x: number; y: number } => {
 		const event = CGEventCreate(null)
 		const pos = CGEventGetLocation(event)
@@ -293,7 +286,6 @@ function createMacOSDriver(): INativeDriver {
 		return { x: pos.x, y: pos.y }
 	}
 
-	// Helper: post and release an event
 	const postEvent = (event: any) => {
 		if (!event) return
 		CGEventPost(kCGHIDEventTap, event)
@@ -335,7 +327,6 @@ function createMacOSDriver(): INativeDriver {
 			postEvent(event)
 		},
 		scroll(dx, dy) {
-			// wheelCount=2 for both vertical and horizontal
 			const event = CGEventCreateScrollWheelEvent(
 				source, kCGScrollEventUnitPixel, 2,
 				Math.round(dy), Math.round(dx)
@@ -353,14 +344,10 @@ function createMacOSDriver(): INativeDriver {
 			postEvent(event)
 		},
 		typeText(text) {
-			// On macOS, use CGEventKeyboardSetUnicodeString for proper text input
-			// For now, type character by character using keyTap
 			for (const ch of text) {
 				const code = ch.charCodeAt(0)
-				// Simple ASCII mapping - for full Unicode, CGEventKeyboardSetUnicodeString is needed
 				if (code >= 32 && code <= 126) {
 					const down = CGEventCreateKeyboardEvent(source, 0, true)
-					// We'd need CGEventKeyboardSetUnicodeString here for full support
 					postEvent(down)
 					const up = CGEventCreateKeyboardEvent(source, 0, false)
 					postEvent(up)

@@ -13,12 +13,14 @@ import {
 type ConnectionStatus = "connecting" | "connected" | "disconnected"
 
 interface ConnectionContextType {
-	wsRef: React.RefObject<WebSocket | null>
 	status: ConnectionStatus
 	platform: string | null
 	latency: number | null
+	sessionId: string
 	send: (msg: unknown) => void
 	subscribe: (type: string, callback: (msg: unknown) => void) => () => void
+	postSignal: (payload: unknown) => Promise<void>
+	pollSignals: () => Promise<unknown[]>
 }
 
 const ConnectionContext = createContext<ConnectionContextType | null>(null)
@@ -30,13 +32,17 @@ export const useConnection = () => {
 	return context
 }
 
+function generateSessionId(): string {
+	return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
 export function ConnectionProvider({
 	children,
 }: { children: React.ReactNode }) {
-	const wsRef = useRef<WebSocket | null>(null)
 	const [status, setStatus] = useState<ConnectionStatus>("disconnected")
 	const [platform, setPlatform] = useState<string | null>(null)
 	const [latency, setLatency] = useState<number | null>(null)
+	const sessionIdRef = useRef(generateSessionId())
 	const isMountedRef = useRef(true)
 	const subscribersRef = useRef<Record<string, Set<(msg: unknown) => void>>>({})
 
@@ -53,149 +59,114 @@ export function ConnectionProvider({
 		[],
 	)
 
-	const reconnectCountRef = useRef(0)
-
-	const connect = useCallback(() => {
-		if (!isMountedRef.current) return
-
-		const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
-		const host = window.location.host
-		const urlParams = new URLSearchParams(window.location.search)
-		const urlToken = urlParams.get("token")
-
-		let storedToken: string | null = null
+	const getAuthToken = useCallback((): string | null => {
 		try {
-			storedToken = localStorage.getItem("rein_auth_token")
-		} catch (e) {
-			// Restricted context (e.g. private mode)
+			const urlParams = new URLSearchParams(window.location.search)
+			return urlParams.get("token") || localStorage.getItem("rein_auth_token")
+		} catch {
+			return null
 		}
+	}, [])
 
-		const token = urlToken || storedToken
-
-		if (urlToken && urlToken !== storedToken) {
-			try {
-				localStorage.setItem("rein_auth_token", urlToken)
-			} catch (e) {
-				// Failed to store
-			}
+	const send = useCallback((msg: unknown) => {
+		const token = getAuthToken()
+		const headers: Record<string, string> = {
+			"Content-Type": "application/json",
 		}
+		if (token) headers.Authorization = `Bearer ${token}`
 
-		let wsUrl = `${protocol}//${host}/ws`
-		if (token) {
-			wsUrl += `?token=${encodeURIComponent(token)}`
+		fetch("/api/input", {
+			method: "POST",
+			headers,
+			body: JSON.stringify(msg),
+		}).catch(() => {})
+	}, [getAuthToken])
+
+	const postSignal = useCallback(async (payload: unknown) => {
+		await fetch("/api/signal", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				sessionId: sessionIdRef.current,
+				payload,
+			}),
+		})
+	}, [])
+
+	const pollSignals = useCallback(async (): Promise<unknown[]> => {
+		try {
+			const res = await fetch(`/api/signal/${sessionIdRef.current}`)
+			const data = await res.json()
+			return data.messages || []
+		} catch {
+			return []
 		}
-
-		if (wsRef.current) {
-			wsRef.current.onopen = null
-			wsRef.current.onclose = null
-			wsRef.current.onerror = null
-			wsRef.current.close()
-		}
-
-		setStatus("connecting")
-		const socket = new WebSocket(wsUrl)
-
-		socket.onopen = () => {
-			if (isMountedRef.current) {
-				setStatus("connected")
-				reconnectCountRef.current = 0 // Reset on successful connect
-			}
-		}
-
-		socket.onmessage = (event) => {
-			if (!isMountedRef.current) return
-
-			// Handle binary data separately (frames)
-			if (event.data instanceof Blob) {
-				// Relayed directly via internal listeners in hooks
-				return
-			}
-
-			try {
-				const msg = JSON.parse(event.data)
-				if (msg.type === "connected") {
-					setPlatform(msg.platform || null)
-				}
-				const typeSubscribers = subscribersRef.current[msg.type]
-				if (typeSubscribers) {
-					for (const callback of typeSubscribers) {
-						callback(msg)
-					}
-				}
-			} catch (e) {
-				// Not JSON or silent error
-			}
-		}
-
-		socket.onclose = () => {
-			if (isMountedRef.current) {
-				setStatus("disconnected")
-				// Exponential Backoff
-				const delay = Math.min(
-					1000 * 2 ** reconnectCountRef.current,
-					30000, // Max 30s
-				)
-				reconnectCountRef.current += 1
-				setTimeout(connect, delay)
-			}
-		}
-
-		socket.onerror = () => {
-			socket.close()
-		}
-
-		wsRef.current = socket
 	}, [])
 
 	useEffect(() => {
 		isMountedRef.current = true
-		connect()
+
+		const token = getAuthToken()
+		if (token) {
+			try {
+				const urlToken = new URLSearchParams(window.location.search).get("token")
+				if (urlToken) localStorage.setItem("rein_auth_token", urlToken)
+			} catch {}
+		}
+
+		fetch("/api/ip")
+			.then((r) => r.json())
+			.then(() => {
+				if (isMountedRef.current) {
+					setStatus("connected")
+					setPlatform(null)
+				}
+			})
+			.catch(() => {
+				if (isMountedRef.current) setStatus("disconnected")
+			})
+
 		return () => {
 			isMountedRef.current = false
-			if (wsRef.current) {
-				wsRef.current.onopen = null
-				wsRef.current.onclose = null
-				wsRef.current.onerror = null
-				wsRef.current.close()
-				wsRef.current = null
-			}
 		}
-	}, [connect])
+	}, [getAuthToken])
 
-	const send = useCallback((msg: unknown) => {
-		if (wsRef.current?.readyState === WebSocket.OPEN) {
-			wsRef.current.send(JSON.stringify(msg))
-		}
-	}, [])
-
-	// Ping/Pong heartbeat for latency measurement
 	useEffect(() => {
 		if (status !== "connected") {
 			setLatency(null)
 			return
 		}
 
-		const unsubscribe = subscribe("pong", (msg: unknown) => {
-			const pong = msg as { timestamp?: number }
-			if (pong.timestamp) {
-				setLatency(Date.now() - pong.timestamp)
+		const measureLatency = async () => {
+			const start = Date.now()
+			try {
+				await fetch("/api/ip")
+				if (isMountedRef.current) {
+					setLatency(Date.now() - start)
+				}
+			} catch {
+				if (isMountedRef.current) setLatency(null)
 			}
-		})
-
-		// Send a ping immediately, then every 2 seconds
-		const sendPing = () => send({ type: "ping", timestamp: Date.now() })
-		sendPing()
-		const interval = setInterval(sendPing, 2000)
-
-		return () => {
-			unsubscribe()
-			clearInterval(interval)
 		}
-	}, [status, send, subscribe])
+
+		measureLatency()
+		const interval = setInterval(measureLatency, 2000)
+
+		return () => clearInterval(interval)
+	}, [status])
 
 	return (
 		<ConnectionContext.Provider
-			value={{ wsRef, status, platform, latency, send, subscribe }}
+			value={{
+				status,
+				platform,
+				latency,
+				sessionId: sessionIdRef.current,
+				send,
+				subscribe,
+				postSignal,
+				pollSignals,
+			}}
 		>
 			{children}
 		</ConnectionContext.Provider>

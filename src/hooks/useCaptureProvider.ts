@@ -1,14 +1,20 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
+import { useConnection } from "../contexts/ConnectionProvider"
 
-export function useCaptureProvider(wsRef: React.RefObject<WebSocket | null>) {
-	const [isSharing, setIsSharing] = useState(false)
-	const [error, setError] = useState<string | null>(null)
-	const streamRef = useRef<MediaStream | null>(null)
+export function useCaptureProvider() {
+	const { postSignal, pollSignals, sessionId } = useConnection()
 	const pcRef = useRef<RTCPeerConnection | null>(null)
+	const streamRef = useRef<MediaStream | null>(null)
+	const [isSharing, setIsSharing] = useState(false)
+	const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
 	const cleanup = useCallback(() => {
+		if (pollIntervalRef.current) {
+			clearInterval(pollIntervalRef.current)
+			pollIntervalRef.current = null
+		}
 		if (pcRef.current) {
 			pcRef.current.close()
 			pcRef.current = null
@@ -20,131 +26,92 @@ export function useCaptureProvider(wsRef: React.RefObject<WebSocket | null>) {
 		setIsSharing(false)
 	}, [])
 
-	const stopSharing = useCallback(() => {
-		cleanup()
-		if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-			wsRef.current.send(JSON.stringify({ type: "stop-mirror" }))
-		}
-	}, [wsRef, cleanup])
-
-	const createPeerConnection = useCallback(() => {
-		if (pcRef.current) pcRef.current.close()
-
-		const pc = new RTCPeerConnection({
-			iceServers: [{ urls: "stun:stun1.l.google.com:19302" }],
-		})
-
-		pc.onicecandidate = (event) => {
-			if (event.candidate && wsRef.current?.readyState === WebSocket.OPEN) {
-				wsRef.current.send(
-					JSON.stringify({
-						type: "webrtc-signaling",
-						candidate: event.candidate,
-					}),
-				)
-			}
-		}
-
-		if (streamRef.current) {
-			for (const track of streamRef.current.getTracks()) {
-				pc.addTrack(track, streamRef.current)
-			}
-		}
-
-		pcRef.current = pc
-		return pc
-	}, [wsRef])
-
-	const handleSignaling = useCallback(
-		async (msg: any) => {
-			if (!pcRef.current) return
-
-			try {
-				if (msg.offer) {
-					await pcRef.current.setRemoteDescription(
-						new RTCSessionDescription(msg.offer),
-					)
-					const answer = await pcRef.current.createAnswer()
-					await pcRef.current.setLocalDescription(answer)
-					wsRef.current?.send(
-						JSON.stringify({ type: "webrtc-signaling", answer }),
-					)
-				} else if (msg.answer) {
-					await pcRef.current.setRemoteDescription(
-						new RTCSessionDescription(msg.answer),
-					)
-				} else if (msg.candidate) {
-					await pcRef.current.addIceCandidate(new RTCIceCandidate(msg.candidate))
-				}
-			} catch (err) {
-				console.error("WebRTC signaling error:", err)
-			}
-		},
-		[wsRef],
-	)
-
 	const startSharing = useCallback(async () => {
-		setError(null)
+		cleanup()
+
 		try {
 			const stream = await navigator.mediaDevices.getDisplayMedia({
-				video: {
-					displaySurface: "monitor",
-					frameRate: { ideal: 60 },
-				},
+				video: true,
+				audio: false,
+			})
+			streamRef.current = stream
+
+			const pc = new RTCPeerConnection({
+				iceServers: [{ urls: "stun:stun1.l.google.com:19302" }],
+			})
+			pcRef.current = pc
+
+			for (const track of stream.getTracks()) {
+				pc.addTrack(track, stream)
+			}
+
+			pc.onicecandidate = (e) => {
+				if (e.candidate) {
+					postSignal({
+						type: "webrtc-signaling",
+						signalingType: "ice-candidate",
+						candidate: e.candidate,
+						from: sessionId,
+					})
+				}
+			}
+
+			stream.getTracks()[0].onended = () => {
+				cleanup()
+				postSignal({
+					type: "stop-mirror",
+					from: sessionId,
+				})
+			}
+
+			const offer = await pc.createOffer()
+			await pc.setLocalDescription(offer)
+
+			await postSignal({
+				type: "webrtc-signaling",
+				signalingType: "offer",
+				sdp: offer,
+				from: sessionId,
 			})
 
-			streamRef.current = stream
-			setIsSharing(true)
+			pollIntervalRef.current = setInterval(async () => {
+				const messages = await pollSignals()
+				for (const msg of messages) {
+					const signal = msg as any
+					if (signal.type !== "webrtc-signaling" || signal.from === sessionId) continue
 
-			if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-				wsRef.current.send(JSON.stringify({ type: "start-provider" }))
-			}
-
-			createPeerConnection()
-
-			stream.getVideoTracks()[0].onended = () => {
-				stopSharing()
-			}
-		} catch (err) {
-			console.error("Failed to start screen capture:", err)
-			setError(err instanceof Error ? err.message : String(err))
-			setIsSharing(false)
-		}
-	}, [wsRef, createPeerConnection, stopSharing])
-
-	useEffect(() => {
-		const ws = wsRef.current
-		if (!ws) return
-
-		const onMessage = (event: MessageEvent) => {
-			try {
-				const msg = JSON.parse(event.data)
-				if (msg.type === "webrtc-signaling") {
-					handleSignaling(msg)
-				} else if (msg.type === "start-mirror" && isSharing) {
-					createPeerConnection()
-					const pc = pcRef.current
-					if (pc) {
-						pc.createOffer().then((offer) => {
-							pc.setLocalDescription(offer)
-							ws.send(JSON.stringify({ type: "webrtc-signaling", offer }))
-						})
+					if (signal.signalingType === "answer" && pcRef.current) {
+						if (pcRef.current.signalingState === "have-local-offer") {
+							await pcRef.current.setRemoteDescription(signal.sdp)
+						}
+					} else if (signal.signalingType === "ice-candidate" && pcRef.current) {
+						await pcRef.current.addIceCandidate(signal.candidate)
 					}
 				}
-			} catch {}
-		}
+			}, 500)
 
-		ws.addEventListener("message", onMessage)
-		return () => {
-			ws.removeEventListener("message", onMessage)
+			setIsSharing(true)
+
+			await postSignal({
+				type: "start-mirror",
+				from: sessionId,
+			})
+		} catch {
 			cleanup()
 		}
-	}, [wsRef, handleSignaling, isSharing, createPeerConnection, cleanup])
+	}, [cleanup, postSignal, pollSignals, sessionId])
 
-	return {
-		isSharing,
-		error,
-		startSharing,
-		stopSharing,
-	}
+	const stopSharing = useCallback(() => {
+		cleanup()
+		postSignal({
+			type: "stop-mirror",
+			from: sessionId,
+		})
+	}, [cleanup, postSignal, sessionId])
+
+	useEffect(() => {
+		return () => cleanup()
+	}, [cleanup])
+
+	return { startSharing, stopSharing, isSharing }
 }

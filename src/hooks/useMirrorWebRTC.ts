@@ -1,22 +1,26 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
+import { useConnection } from "../contexts/ConnectionProvider"
 
-export function useMirrorWebRTC(
-	wsRef: React.RefObject<WebSocket | null>,
-	status: "connecting" | "connected" | "disconnected",
-) {
-	const [stream, setStream] = useState<MediaStream | null>(null)
-	const [isConnecting, setIsConnecting] = useState(false)
+export function useMirrorWebRTC() {
+	const { postSignal, pollSignals, sessionId } = useConnection()
 	const pcRef = useRef<RTCPeerConnection | null>(null)
+	const [stream, setStream] = useState<MediaStream | null>(null)
+	const [mirrorStatus, setMirrorStatus] = useState<"idle" | "negotiating" | "streaming">("idle")
+	const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
 	const cleanup = useCallback(() => {
+		if (pollIntervalRef.current) {
+			clearInterval(pollIntervalRef.current)
+			pollIntervalRef.current = null
+		}
 		if (pcRef.current) {
 			pcRef.current.close()
 			pcRef.current = null
 		}
 		setStream(null)
-		setIsConnecting(false)
+		setMirrorStatus("idle")
 	}, [])
 
 	const createPeerConnection = useCallback(() => {
@@ -26,89 +30,80 @@ export function useMirrorWebRTC(
 			iceServers: [{ urls: "stun:stun1.l.google.com:19302" }],
 		})
 
-		pc.onicecandidate = (event) => {
-			if (event.candidate && wsRef.current?.readyState === WebSocket.OPEN) {
-				wsRef.current.send(
-					JSON.stringify({
-						type: "webrtc-signaling",
-						candidate: event.candidate,
-					}),
-				)
+		pc.ontrack = (e) => {
+			if (e.streams?.[0]) {
+				setStream(e.streams[0])
+				setMirrorStatus("streaming")
 			}
 		}
 
-		pc.ontrack = (event) => {
-			if (event.streams && event.streams[0]) {
-				setStream(event.streams[0])
-				setIsConnecting(false)
+		pc.onicecandidate = (e) => {
+			if (e.candidate) {
+				postSignal({
+					type: "webrtc-signaling",
+					signalingType: "ice-candidate",
+					candidate: e.candidate,
+					from: sessionId,
+				})
 			}
 		}
 
-		pc.oniceconnectionstatechange = () => {
-			if (pc.iceConnectionState === "disconnected" || pc.iceConnectionState === "failed") {
+		pc.onconnectionstatechange = () => {
+			if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
 				cleanup()
 			}
 		}
 
 		pcRef.current = pc
 		return pc
-	}, [wsRef, cleanup])
+	}, [postSignal, sessionId, cleanup])
 
-	const handleSignaling = useCallback(
-		async (msg: any) => {
-			try {
-				if (!pcRef.current) createPeerConnection()
-				const pc = pcRef.current!
+	const startPolling = useCallback(() => {
+		if (pollIntervalRef.current) return
 
-				if (msg.offer) {
-					await pc.setRemoteDescription(new RTCSessionDescription(msg.offer))
+		pollIntervalRef.current = setInterval(async () => {
+			const messages = await pollSignals()
+			for (const msg of messages) {
+				const signal = msg as any
+
+				if (signal.type === "start-mirror" && signal.from !== sessionId) {
+					setMirrorStatus("negotiating")
+				}
+
+				if (signal.type === "stop-mirror") {
+					cleanup()
+					continue
+				}
+
+				if (signal.type !== "webrtc-signaling" || signal.from === sessionId) continue
+
+				if (signal.signalingType === "offer") {
+					const pc = createPeerConnection()
+					await pc.setRemoteDescription(signal.sdp)
 					const answer = await pc.createAnswer()
 					await pc.setLocalDescription(answer)
-					wsRef.current?.send(
-						JSON.stringify({ type: "webrtc-signaling", answer }),
-					)
-				} else if (msg.answer) {
-					await pc.setRemoteDescription(new RTCSessionDescription(msg.answer))
-				} else if (msg.candidate) {
-					await pc.addIceCandidate(new RTCIceCandidate(msg.candidate))
+
+					await postSignal({
+						type: "webrtc-signaling",
+						signalingType: "answer",
+						sdp: answer,
+						from: sessionId,
+					})
+					setMirrorStatus("negotiating")
+				} else if (signal.signalingType === "ice-candidate" && pcRef.current) {
+					await pcRef.current.addIceCandidate(signal.candidate)
 				}
-			} catch (err) {
-				console.error("Consumer WebRTC signaling error:", err)
 			}
-		},
-		[wsRef, createPeerConnection],
-	)
+		}, 500)
+	}, [pollSignals, sessionId, createPeerConnection, postSignal, cleanup])
 
 	useEffect(() => {
-		const ws = wsRef.current
-		if (!ws || status !== "connected") {
-			cleanup()
-			return
+		const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+		if (isMobile) {
+			startPolling()
 		}
+		return () => cleanup()
+	}, [startPolling, cleanup])
 
-		const onMessage = (event: MessageEvent) => {
-			try {
-				if (typeof event.data !== "string") return
-				const msg = JSON.parse(event.data)
-				if (msg.type === "webrtc-signaling") {
-					handleSignaling(msg)
-				}
-			} catch {}
-		}
-
-		ws.addEventListener("message", onMessage)
-		setIsConnecting(true)
-		
-		ws.send(JSON.stringify({ type: "start-mirror" }))
-
-		return () => {
-			ws.removeEventListener("message", onMessage)
-			if (ws.readyState === WebSocket.OPEN) {
-				ws.send(JSON.stringify({ type: "stop-mirror" }))
-			}
-			cleanup()
-		}
-	}, [wsRef, status, handleSignaling, cleanup])
-
-	return { stream, isConnecting }
+	return { stream, mirrorStatus }
 }

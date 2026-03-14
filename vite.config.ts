@@ -17,18 +17,18 @@ const config = defineConfig({
 	},
 	plugins: [
 		{
-			name: "websocket-server",
+			name: "api-server",
 			async configureServer(server) {
 				const httpServer = server.httpServer
 				if (!httpServer) return
-				const { createWsServer } = await import("./src/server/websocket")
-				await createWsServer(httpServer)
+				const { createApiServer } = await import("./src/server/api")
+				await createApiServer(httpServer)
 			},
 			async configurePreviewServer(server) {
 				const httpServer = server.httpServer
 				if (!httpServer) return
-				const { createWsServer } = await import("./src/server/websocket")
-				await createWsServer(httpServer)
+				const { createApiServer } = await import("./src/server/api")
+				await createApiServer(httpServer)
 			},
 		},
 		devtools(),

@@ -17,7 +17,6 @@ function SettingsPage() {
 
 	const serverConfigChanged = frontendPort !== originalPort
 
-	// Client Side Settings (LocalStorage)
 	const [invertScroll, setInvertScroll] = useState(() => {
 		if (typeof window === "undefined") return false
 		try {
@@ -49,13 +48,11 @@ function SettingsPage() {
 
 	const [qrData, setQrData] = useState("")
 
-	// Load initial state (IP is not stored in localStorage; only sensitivity, invert, theme are client settings)
 	const [authToken, setAuthToken] = useState(() => {
 		if (typeof window === "undefined") return ""
 		return localStorage.getItem("rein_auth_token") || ""
 	})
 
-	// Derive URLs once at the top
 	const appPort = String(frontendPort)
 	const protocol =
 		typeof window !== "undefined" ? window.location.protocol : "http:"
@@ -70,49 +67,26 @@ function SettingsPage() {
 		setFrontendPort(String(serverConfig.frontendPort))
 	}, [])
 
-	// Auto-generate token on settings page load (localhost only)
 	useEffect(() => {
 		if (typeof window === "undefined") return
 
 		let isMounted = true
 
-		const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
-		const wsUrl = `${protocol}//${window.location.host}/ws`
-		const socket = new WebSocket(wsUrl)
-
-		socket.onopen = () => {
-			if (socket.readyState === WebSocket.OPEN) {
-				socket.send(JSON.stringify({ type: "generate-token" }))
-			}
-		}
-
-		socket.onmessage = (event) => {
-			try {
-				const data = JSON.parse(event.data)
-				if (data.type === "token-generated" && data.token) {
-					if (isMounted) {
-						setAuthToken(data.token)
-						localStorage.setItem("rein_auth_token", data.token)
-					}
-					socket.close()
+		fetch("/api/token", { method: "POST" })
+			.then((r) => r.json())
+			.then((data) => {
+				if (isMounted && data.token) {
+					setAuthToken(data.token)
+					localStorage.setItem("rein_auth_token", data.token)
 				}
-			} catch (e) {
-				console.error(e)
-			}
-		}
+			})
+			.catch(() => {})
 
 		return () => {
 			isMounted = false
-			if (
-				socket.readyState === WebSocket.OPEN ||
-				socket.readyState === WebSocket.CONNECTING
-			) {
-				socket.close()
-			}
 		}
 	}, [])
 
-	// Effect: Update LocalStorage when settings change
 	useEffect(() => {
 		localStorage.setItem("rein_sensitivity", String(sensitivity))
 	}, [sensitivity])
@@ -121,50 +95,30 @@ function SettingsPage() {
 		localStorage.setItem("rein_invert", JSON.stringify(invertScroll))
 	}, [invertScroll])
 
-	// Effect: Theme
 	useEffect(() => {
 		if (typeof window === "undefined") return
 		localStorage.setItem(APP_CONFIG.THEME_STORAGE_KEY, theme)
 		document.documentElement.setAttribute("data-theme", theme)
 	}, [theme])
 
-	// Generate QR when IP changes or Token changes
 	useEffect(() => {
 		if (!ip || typeof window === "undefined" || !shareUrl) return
 
 		QRCode.toDataURL(shareUrl)
 			.then(setQrData)
-			.catch((e) => console.error("QR Error:", e))
+			.catch(() => {})
 	}, [ip, shareUrl])
 
-	// Effect: Auto-detect LAN IP from Server (only if on localhost)
 	useEffect(() => {
 		if (typeof window === "undefined") return
 		if (window.location.hostname !== "localhost") return
 
-		const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
-		const wsUrl = `${protocol}//${window.location.host}/ws`
-		const socket = new WebSocket(wsUrl)
-
-		socket.onopen = () => {
-			socket.send(JSON.stringify({ type: "get-ip" }))
-		}
-
-		socket.onmessage = (event) => {
-			try {
-				const data = JSON.parse(event.data)
-				if (data.type === "server-ip" && data.ip) {
-					setIp(data.ip)
-					socket.close()
-				}
-			} catch (e) {
-				console.error(e)
-			}
-		}
-
-		return () => {
-			if (socket.readyState === WebSocket.OPEN) socket.close()
-		}
+		fetch("/api/ip")
+			.then((r) => r.json())
+			.then((data) => {
+				if (data.ip) setIp(data.ip)
+			})
+			.catch(() => {})
 	}, [])
 
 	return (
@@ -315,34 +269,22 @@ function SettingsPage() {
 									return
 								}
 
-								const protocol =
-									window.location.protocol === "https:" ? "wss:" : "ws:"
-								const host = window.location.host
-								const wsUrl = `${protocol}//${host}/ws`
-								const socket = new WebSocket(wsUrl)
-
-								socket.onerror = () => {
-									alert("Failed to connect to the server.")
-								}
-
-								socket.onopen = () => {
-									socket.send(
-										JSON.stringify({
-											type: "update-config",
-											config: {
-												frontendPort: port,
-											},
-										}),
-									)
-
-									setTimeout(() => {
-										socket.close()
-										const newProtocol = window.location.protocol
-										const newHostname = window.location.hostname
-										const newUrl = `${newProtocol}//${newHostname}:${frontendPort}/settings`
-										window.location.href = newUrl
-									}, 1000)
-								}
+								fetch("/api/config", {
+									method: "POST",
+									headers: { "Content-Type": "application/json" },
+									body: JSON.stringify({ frontendPort: port }),
+								})
+									.then(() => {
+										setTimeout(() => {
+											const newProtocol = window.location.protocol
+											const newHostname = window.location.hostname
+											const newUrl = `${newProtocol}//${newHostname}:${frontendPort}/settings`
+											window.location.href = newUrl
+										}, 1000)
+									})
+									.catch(() => {
+										alert("Failed to connect to the server.")
+									})
 							}}
 						>
 							Save Config

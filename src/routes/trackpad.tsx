@@ -23,7 +23,6 @@ function TrackpadPage() {
 	const [keyboardOpen, setKeyboardOpen] = useState(false)
 	const [extraKeysVisible, setExtraKeysVisible] = useState(true)
 
-	// Load Client Settings
 	const [sensitivity] = useState(() => {
 		if (typeof window === "undefined") return 1.0
 		const s = localStorage.getItem("rein_sensitivity")
@@ -37,7 +36,6 @@ function TrackpadPage() {
 	})
 
 	const { send, sendCombo } = useRemoteConnection()
-	// Pass sensitivity and invertScroll to the gesture hook
 	const { isTracking, handlers } = useTrackpadGesture(
 		send,
 		scrollMode,
@@ -45,7 +43,6 @@ function TrackpadPage() {
 		invertScroll,
 	)
 
-	// When keyboardOpen changes, focus or blur the hidden input
 	useEffect(() => {
 		if (keyboardOpen) {
 			hiddenInputRef.current?.focus()
@@ -64,7 +61,6 @@ function TrackpadPage() {
 
 	const handleClick = (button: "left" | "right") => {
 		send({ type: "click", button, press: true })
-		// Release after short delay to simulate click
 		setTimeout(() => send({ type: "click", button, press: false }), 50)
 	}
 
@@ -89,22 +85,18 @@ function TrackpadPage() {
 			}
 		}
 
-		// 1. Backspace
 		if (inputType === "deleteContentBackward" || val.length === 0) {
 			send({ type: "key", key: "backspace" })
 			resetInput()
 			return
 		}
 
-		// 2. Enter
 		if (inputType === "insertLineBreak" || inputType === "insertParagraph") {
 			send({ type: "key", key: "enter" })
 			resetInput()
 			return
 		}
 
-		// 3. Text
-		// Early return only for EXPLICIT composition text that isn't finished
 		if (isComposingRef.current && inputType === "insertCompositionText") {
 			return
 		}
@@ -154,7 +146,6 @@ function TrackpadPage() {
 	const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
 		const key = e.key.toLowerCase()
 
-		// 1. Enter key fallback
 		if (key === "enter") {
 			send({ type: "key", key: "enter" })
 			if (hiddenInputRef.current) {
@@ -163,7 +154,6 @@ function TrackpadPage() {
 			return
 		}
 
-		// 2. Modifier Logic
 		if (modifier !== "Release") {
 			if (key === "escape") {
 				e.preventDefault()
@@ -178,7 +168,6 @@ function TrackpadPage() {
 			}
 		}
 
-		// 3. Special keys (Arrows, Tab, etc.)
 		if (
 			key.length > 1 &&
 			key !== "unidentified" &&
