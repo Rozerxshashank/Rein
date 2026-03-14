@@ -53,7 +53,7 @@ function readBody(req: IncomingMessage): Promise<string> {
 		let size = 0
 		req.on("data", (chunk: Buffer) => {
 			size += chunk.length
-			if (size > 10240) {
+			if (size > 102400) {
 				req.destroy()
 				reject(new Error("Body too large"))
 			}
@@ -132,7 +132,8 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 			signalStore.push({ sessionId, payload, timestamp: Date.now(), id: signalIdCounter })
 			while (signalStore.length > MAX_STORE_SIZE) signalStore.shift()
 			json(res, 200, { ok: true })
-		} catch {
+		} catch (e) {
+			logger.error(`Failed to parse signal body: ${String(e)}`)
 			json(res, 400, { error: "Invalid body" })
 		}
 		return true
