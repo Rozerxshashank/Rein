@@ -39,14 +39,13 @@ function RootComponent() {
 		<RootDocument>
 			<DesktopCaptureProvider />
 			<Outlet />
-			{/* <TanStackRouterDevtools position="bottom-right" /> */}
 		</RootDocument>
 	)
 }
 
 function DesktopCaptureProvider() {
-	const { wsRef, status } = useConnection()
-	const { startSharing } = useCaptureProvider(wsRef)
+	const { status } = useConnection()
+	const { startSharing } = useCaptureProvider()
 	const hasStartedRef = useRef(false)
 
 	useEffect(() => {

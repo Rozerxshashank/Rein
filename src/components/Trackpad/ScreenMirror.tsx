@@ -2,7 +2,6 @@
 
 import type React from "react"
 import { useEffect, useRef } from "react"
-import { useConnection } from "../../contexts/ConnectionProvider"
 import { useMirrorWebRTC } from "../../hooks/useMirrorWebRTC"
 
 interface ScreenMirrorProps {
@@ -21,9 +20,8 @@ export const ScreenMirror = ({
 	isTracking,
 	handlers,
 }: ScreenMirrorProps) => {
-	const { wsRef, status } = useConnection()
 	const videoRef = useRef<HTMLVideoElement>(null)
-	const { stream, isConnecting } = useMirrorWebRTC(wsRef, status)
+	const { stream, mirrorStatus } = useMirrorWebRTC()
 
 	useEffect(() => {
 		if (videoRef.current && stream) {
@@ -51,7 +49,7 @@ export const ScreenMirror = ({
 					<div className="text-center px-6">
 						<p className="font-semibold text-lg">{TEXTS.WAITING}</p>
 						<p className="text-sm opacity-60">
-							{isConnecting ? "Negotiating connection..." : TEXTS.AUTOMATIC}
+							{mirrorStatus === "negotiating" ? "Negotiating connection..." : TEXTS.AUTOMATIC}
 						</p>
 					</div>
 				</div>
