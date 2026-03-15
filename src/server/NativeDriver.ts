@@ -56,7 +56,7 @@ function createWindowsDriver(): INativeDriver {
 		u: koffi.union({ mi: MOUSEINPUT, ki: KEYBDINPUT, hi: HARDWAREINPUT }),
 	})
 
-	// const POINT = koffi.struct("POINT", { x: "long", y: "long" })
+	const POINT = koffi.struct("POINT", { x: "long", y: "long" })
 
 	const SendInput = user32.func(
 		"unsigned int __stdcall SendInput(unsigned int cInputs, INPUT *pInputs, int cbSize)",
@@ -259,7 +259,10 @@ function createMacOSDriver(): INativeDriver {
 
 	const kCGScrollEventUnitPixel = 1
 
-	// const CGPoint = koffi.struct("CGPoint", { x: "double", y: "double" })
+	const CGPoint = koffi.struct("CGPoint", {
+		x: "double",
+		y: "double",
+	})
 
 	const CGEventSourceCreate = cg.func("void* CGEventSourceCreate(int32_t stateID)")
 	const CGEventCreateMouseEvent = cg.func(
