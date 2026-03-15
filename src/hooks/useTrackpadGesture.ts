@@ -30,7 +30,7 @@ const BUTTON_MAP: Record<number, "left" | "right" | "middle"> = {
 export const useTrackpadGesture = (
 	send: (msg: unknown) => void,
 	scrollMode: boolean,
-	sensitivity = 1.5,
+	sensitivity = 1.0,
 	invertScroll = false,
 	axisThreshold = 2.5,
 ) => {

@@ -55,8 +55,8 @@ function createWindowsDriver(): INativeDriver {
 		type: "uint32_t",
 		u: koffi.union({ mi: MOUSEINPUT, ki: KEYBDINPUT, hi: HARDWAREINPUT }),
 	})
-	
-	const POINT = koffi.struct("POINT", { x: "long", y: "long" })
+
+	// const POINT = koffi.struct("POINT", { x: "long", y: "long" })
 
 	const SendInput = user32.func(
 		"unsigned int __stdcall SendInput(unsigned int cInputs, INPUT *pInputs, int cbSize)",
@@ -85,8 +85,8 @@ function createWindowsDriver(): INativeDriver {
 			SendInput(1, [{ type: INPUT_MOUSE, u: { mi: { dx: 0, dy: 0, mouseData: 0, dwFlags: flag, time: 0, dwExtraInfo: 0 } } }], SZ)
 		},
 		scroll(dx, dy) {
-			if (dy !== 0) SendInput(1, [{ type: INPUT_MOUSE, u: { mi: { dx: 0, dy: 0, mouseData: Math.round(dy * 120), dwFlags: MOUSEEVENTF_WHEEL, time: 0, dwExtraInfo: 0 } } }], SZ)
-			if (dx !== 0) SendInput(1, [{ type: INPUT_MOUSE, u: { mi: { dx: 0, dy: 0, mouseData: Math.round(dx * 120), dwFlags: MOUSEEVENTF_HWHEEL, time: 0, dwExtraInfo: 0 } } }], SZ)
+			if (dy !== 0) SendInput(1, [{ type: INPUT_MOUSE, u: { mi: { dx: 0, dy: 0, mouseData: Math.round(dy * 40), dwFlags: MOUSEEVENTF_WHEEL, time: 0, dwExtraInfo: 0 } } }], SZ)
+			if (dx !== 0) SendInput(1, [{ type: INPUT_MOUSE, u: { mi: { dx: 0, dy: 0, mouseData: Math.round(dx * 40), dwFlags: MOUSEEVENTF_HWHEEL, time: 0, dwExtraInfo: 0 } } }], SZ)
 		},
 		keyTap(vk) {
 			SendInput(2, [
@@ -126,19 +126,19 @@ function createLinuxDriver(): INativeDriver {
 		code: "uint16_t",
 		value: "int32_t",
 	})
-    const uinput_setup = koffi.struct("uinput_setup", {
-        id_bustype: "uint16_t",
-        id_vendor: "uint16_t",
-        id_product: "uint16_t",
-        id_version: "uint16_t",
-        name: koffi.array("char", 80),
-        ff_effects_max: "uint32_t",
-    })
+	const uinput_setup = koffi.struct("uinput_setup", {
+		id_bustype: "uint16_t",
+		id_vendor: "uint16_t",
+		id_product: "uint16_t",
+		id_version: "uint16_t",
+		name: koffi.array("char", 80),
+		ff_effects_max: "uint32_t",
+	})
 	const EVENT_SIZE = koffi.sizeof(input_event)
-	
+
 	const open = libc.func("int open(const char *path, int flags)")
 	const ioctl_int = libc.func("int ioctl(int fd, unsigned long request, int value)")
-    const ioctl_ptr = libc.func("int ioctl(int fd, unsigned long request, uinput_setup *arg)")
+	const ioctl_ptr = libc.func("int ioctl(int fd, unsigned long request, uinput_setup *arg)")
 	const write_event = libc.func("intptr_t write(int fd, const input_event *buf, uintptr_t count)")
 
 	const O_WRONLY = 1
@@ -214,8 +214,10 @@ function createLinuxDriver(): INativeDriver {
 			emit(EV_KEY, code, press ? 1 : 0)
 		},
 		scroll(dx, dy) {
-			if (dy !== 0) emit(EV_REL, REL_WHEEL, Math.round(dy))
-			if (dx !== 0) emit(EV_REL, REL_HWHEEL, Math.round(dx))
+			const scrollY = Math.abs(dy) < 1 && dy !== 0 ? Math.sign(dy) : Math.round(dy)
+			const scrollX = Math.abs(dx) < 1 && dx !== 0 ? Math.sign(dx) : Math.round(dx)
+			if (scrollY !== 0) emit(EV_REL, REL_WHEEL, scrollY)
+			if (scrollX !== 0) emit(EV_REL, REL_HWHEEL, scrollX)
 		},
 		keyTap(vk) { emit(EV_KEY, vk, 1); emit(EV_KEY, vk, 0); },
 		keyToggle(vk, press) { emit(EV_KEY, vk, press ? 1 : 0); },
@@ -257,10 +259,7 @@ function createMacOSDriver(): INativeDriver {
 
 	const kCGScrollEventUnitPixel = 1
 
-	const CGPoint = koffi.struct("CGPoint", {
-		x: "double",
-		y: "double",
-	})
+	// const CGPoint = koffi.struct("CGPoint", { x: "double", y: "double" })
 
 	const CGEventSourceCreate = cg.func("void* CGEventSourceCreate(int32_t stateID)")
 	const CGEventCreateMouseEvent = cg.func(
@@ -360,21 +359,21 @@ function createMacOSDriver(): INativeDriver {
 
 function createStubDriver(): INativeDriver {
 	return {
-		moveMouse: () => {}, click: () => {}, scroll: () => {}, keyTap: () => {}, keyToggle: () => {}, typeText: () => {},
+		moveMouse: () => { }, click: () => { }, scroll: () => { }, keyTap: () => { }, keyToggle: () => { }, typeText: () => { },
 	}
 }
 
 const DRIVER_KEY = "__rein_native_driver__" as const;
 
 export const getDriver = (): INativeDriver => {
-    if (!(globalThis as any)[DRIVER_KEY]) {
-        (globalThis as any)[DRIVER_KEY] = platform === "win32"
-            ? createWindowsDriver()
-            : platform === "linux"
-                ? createLinuxDriver()
-                : platform === "darwin"
-                    ? createMacOSDriver()
-                    : createStubDriver();
-    }
-    return (globalThis as any)[DRIVER_KEY];
+	if (!(globalThis as any)[DRIVER_KEY]) {
+		(globalThis as any)[DRIVER_KEY] = platform === "win32"
+			? createWindowsDriver()
+			: platform === "linux"
+				? createLinuxDriver()
+				: platform === "darwin"
+					? createMacOSDriver()
+					: createStubDriver();
+	}
+	return (globalThis as any)[DRIVER_KEY];
 };

@@ -138,7 +138,7 @@ export class InputHandler {
 
 			case "zoom":
 				if (msg.delta && msg.delta !== 0) {
-					const amount = Math.sign(msg.delta) * 0.5 // Gentler zoom
+					const amount = Math.sign(msg.delta) * 1.0 // Fixed: 0.5 rounds to 0 on Linux drivers
 					getDriver().keyToggle(KEY_MAP.control || 0, true)
 					getDriver().scroll(0, amount)
 					getDriver().keyToggle(KEY_MAP.control || 0, false)
