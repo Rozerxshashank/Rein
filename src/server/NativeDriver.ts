@@ -332,9 +332,11 @@ function createMacOSDriver(): INativeDriver {
 			postEvent(event)
 		},
 		scroll(dx, dy) {
+			const scrollY = Math.abs(dy) < 1 && dy !== 0 ? Math.sign(dy) : Math.round(dy)
+			const scrollX = Math.abs(dx) < 1 && dx !== 0 ? Math.sign(dx) : Math.round(dx)
 			const event = CGEventCreateScrollWheelEvent(
 				source, kCGScrollEventUnitPixel, 2,
-				Math.round(dy), Math.round(dx)
+				scrollY, scrollX
 			)
 			postEvent(event)
 		},
