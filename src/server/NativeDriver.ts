@@ -278,6 +278,9 @@ function createMacOSDriver(): INativeDriver {
 	const CFRelease = cg.func("void CFRelease(void* cf)")
 	const CGEventGetLocation = cg.func("CGPoint CGEventGetLocation(void* event)")
 	const CGEventCreate = cg.func("void* CGEventCreate(void* source)")
+	const CGEventKeyboardSetUnicodeString = cg.func(
+		"void CGEventKeyboardSetUnicodeString(void* event, unsigned long stringLength, const uint16_t *unicodeString)"
+	)
 
 	const kCGHIDEventTap = 0
 
@@ -347,15 +350,20 @@ function createMacOSDriver(): INativeDriver {
 		},
 		typeText(text) {
 			for (const ch of text) {
-				const code = ch.charCodeAt(0)
-				if (code >= 32 && code <= 126) {
-					const down = CGEventCreateKeyboardEvent(source, 0, true)
-					postEvent(down)
-					const up = CGEventCreateKeyboardEvent(source, 0, false)
-					postEvent(up)
-				}
+				const charCode = ch.charCodeAt(0)
+				const buf = Buffer.alloc(2)
+				buf.writeUInt16LE(charCode, 0)
+
+				const down = CGEventCreateKeyboardEvent(source, 0, true)
+				CGEventKeyboardSetUnicodeString(down, 1, buf)
+				CGEventPost(kCGHIDEventTap, down)
+				CFRelease(down)
+
+				const up = CGEventCreateKeyboardEvent(source, 0, false)
+				CGEventKeyboardSetUnicodeString(up, 1, buf)
+				CGEventPost(kCGHIDEventTap, up)
+				CFRelease(up)
 			}
-			console.warn("typeText on macOS: basic implementation, may not handle all characters")
 		},
 	}
 }
