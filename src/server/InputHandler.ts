@@ -12,6 +12,7 @@ export interface InputMessage {
 		| "text"
 		| "zoom"
 		| "combo"
+		| "touch"
 	dx?: number
 	dy?: number
 	button?: "left" | "right" | "middle"
@@ -20,6 +21,7 @@ export interface InputMessage {
 	keys?: string[]
 	text?: string
 	delta?: number
+	contacts?: Array<{ id: number; x: number; y: number; type: "start" | "move" | "end" }>
 }
 
 export class InputHandler {
@@ -30,6 +32,12 @@ export class InputHandler {
 	private moveTimer: ReturnType<typeof setTimeout> | null = null
 	private scrollTimer: ReturnType<typeof setTimeout> | null = null
 	private throttleMs: number
+
+	private activeContacts = new Map<number, { x: number; y: number }>()
+	private touchStartTime = 0
+	private touchMoved = false
+	private touchFingerCount = 0
+	private lastPinchDist: number | null = null
 
 	constructor(throttleMs = 8) {
 		this.throttleMs = throttleMs
@@ -45,6 +53,100 @@ export class InputHandler {
 
 	private clamp(value: number, min: number, max: number): number {
 		return Math.max(min, Math.min(max, value))
+	}
+
+	private getTouchDistance(a: { x: number; y: number }, b: { x: number; y: number }): number {
+		const dx = a.x - b.x
+		const dy = a.y - b.y
+		return Math.sqrt(dx * dx + dy * dy)
+	}
+
+	private handleTouchContacts(contacts: Array<{ id: number; x: number; y: number; type: "start" | "move" | "end" }>) {
+		const driver = getDriver()
+
+		for (const c of contacts) {
+			if (c.type === "start") {
+				if (this.activeContacts.size === 0) {
+					this.touchStartTime = Date.now()
+					this.touchMoved = false
+					this.touchFingerCount = 0
+				}
+				this.activeContacts.set(c.id, { x: c.x, y: c.y })
+				this.touchFingerCount = Math.max(this.touchFingerCount, this.activeContacts.size)
+
+				if (this.activeContacts.size === 2) {
+					const pts = Array.from(this.activeContacts.values())
+					this.lastPinchDist = this.getTouchDistance(pts[0], pts[1])
+				}
+			} else if (c.type === "move") {
+				const prev = this.activeContacts.get(c.id)
+				if (!prev) continue
+
+				const fingerCount = this.activeContacts.size
+
+				const SCALE = 600
+				const dx = (c.x - prev.x) * SCALE
+				const dy = (c.y - prev.y) * SCALE
+
+				if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+					this.touchMoved = true
+				}
+
+				if (fingerCount === 1) {
+					driver.moveMouse(Math.round(dx), Math.round(dy))
+				} else if (fingerCount === 2) {
+					const pts = Array.from(this.activeContacts.values())
+					const updatedPts = pts.map(p => ({ ...p }))
+					const idx = Array.from(this.activeContacts.keys()).indexOf(c.id)
+					if (idx >= 0) updatedPts[idx] = { x: c.x, y: c.y }
+
+					if (updatedPts.length === 2) {
+						const dist = this.getTouchDistance(updatedPts[0], updatedPts[1])
+
+						if (this.lastPinchDist !== null) {
+							const pinchDelta = dist - this.lastPinchDist
+							const PINCH_THRESHOLD = 0.008
+
+							if (Math.abs(pinchDelta) > PINCH_THRESHOLD) {
+								const zoomAmount = Math.sign(pinchDelta) * 1.0
+								driver.keyToggle(MODIFIER, true)
+								driver.scroll(0, zoomAmount)
+								driver.keyToggle(MODIFIER, false)
+								this.lastPinchDist = dist
+							} else {
+								driver.scroll(Math.round(dx), Math.round(dy))
+							}
+						}
+						this.lastPinchDist = dist
+					}
+				}
+
+				this.activeContacts.set(c.id, { x: c.x, y: c.y })
+			} else if (c.type === "end") {
+				this.activeContacts.delete(c.id)
+
+				if (this.activeContacts.size < 2) {
+					this.lastPinchDist = null
+				}
+
+				if (this.activeContacts.size === 0) {
+					const elapsed = Date.now() - this.touchStartTime
+					if (!this.touchMoved && elapsed < 300) {
+						if (this.touchFingerCount === 1) {
+							driver.click("left", true)
+							setTimeout(() => driver.click("left", false), 50)
+						} else if (this.touchFingerCount === 2) {
+							driver.click("right", true)
+							setTimeout(() => driver.click("right", false), 50)
+						} else if (this.touchFingerCount === 3) {
+							driver.click("middle", true)
+							setTimeout(() => driver.click("middle", false), 50)
+						}
+					}
+					this.touchFingerCount = 0
+				}
+			}
+		}
 	}
 
 	async handleMessage(msg: InputMessage) {
@@ -169,6 +271,12 @@ export class InputHandler {
 			case "text":
 				if (msg.text) {
 					getDriver().typeText(msg.text)
+				}
+				break
+
+			case "touch":
+				if (msg.contacts && Array.isArray(msg.contacts)) {
+					this.handleTouchContacts(msg.contacts)
 				}
 				break
 		}

@@ -6,7 +6,7 @@ import { ControlBar } from "../components/Trackpad/ControlBar"
 import { ExtraKeys } from "../components/Trackpad/ExtraKeys"
 import { TouchArea } from "../components/Trackpad/TouchArea"
 import { useRemoteConnection } from "../hooks/useRemoteConnection"
-import { useTrackpadGesture } from "../hooks/useTrackpadGesture"
+import { useTouchStreamer } from "../hooks/useTouchStreamer"
 import { ScreenMirror } from "../components/Trackpad/ScreenMirror"
 
 export const Route = createFileRoute("/trackpad")({
@@ -23,25 +23,8 @@ function TrackpadPage() {
 	const [keyboardOpen, setKeyboardOpen] = useState(false)
 	const [extraKeysVisible, setExtraKeysVisible] = useState(true)
 
-	const [sensitivity] = useState(() => {
-		if (typeof window === "undefined") return 1.0
-		const s = localStorage.getItem("rein_sensitivity")
-		return s ? Number.parseFloat(s) : 1.0
-	})
-
-	const [invertScroll] = useState(() => {
-		if (typeof window === "undefined") return false
-		const s = localStorage.getItem("rein_invert")
-		return s ? JSON.parse(s) : false
-	})
-
 	const { send, sendCombo } = useRemoteConnection()
-	const { isTracking, handlers } = useTrackpadGesture(
-		send,
-		scrollMode,
-		sensitivity,
-		invertScroll,
-	)
+	const touchHandlers = useTouchStreamer()
 
 	useEffect(() => {
 		if (keyboardOpen) {
@@ -209,14 +192,14 @@ function TrackpadPage() {
 			{/* TOUCH AREA */}
 			<div className="flex-1 min-h-0 relative flex flex-col border-b border-base-200">
 				<TouchArea
-					isTracking={isTracking}
+					isTracking={false}
 					scrollMode={scrollMode}
-					handlers={handlers}
+					handlers={touchHandlers}
 				/>
 				<ScreenMirror
-					isTracking={isTracking}
+					isTracking={false}
 					scrollMode={scrollMode}
-					handlers={handlers}
+					handlers={touchHandlers}
 				/>
 				{bufferText !== "" && <BufferBar bufferText={bufferText} />}
 			</div>

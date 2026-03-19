@@ -4,6 +4,13 @@ import { KEY_MAP } from "./KeyMap"
 
 const platform = os.platform()
 
+export interface TouchContact {
+	id: number
+	x: number
+	y: number
+	type: "start" | "move" | "end"
+}
+
 export interface INativeDriver {
 	moveMouse(dx: number, dy: number): void
 	click(button: "left" | "right" | "middle", press: boolean): void
@@ -11,6 +18,7 @@ export interface INativeDriver {
 	keyTap(vk: number): void
 	keyToggle(vk: number, press: boolean): void
 	typeText(text: string): void
+	touch(contacts: TouchContact[]): void
 }
 
 function createWindowsDriver(): INativeDriver {
@@ -56,7 +64,11 @@ function createWindowsDriver(): INativeDriver {
 		u: koffi.union({ mi: MOUSEINPUT, ki: KEYBDINPUT, hi: HARDWAREINPUT }),
 	})
 
-	const POINT = koffi.struct("POINT", { x: "long", y: "long" })
+	const _POINT = koffi.struct("POINT", { x: "long", y: "long" }); void _POINT
+
+	const MOUSEEVENTF_MOVE = 0x0001
+	const MOUSEEVENTF_ABSOLUTE = 0x8000
+	const MOUSEEVENTF_VIRTUALDESK = 0x4000
 
 	const SendInput = user32.func(
 		"unsigned int __stdcall SendInput(unsigned int cInputs, INPUT *pInputs, int cbSize)",
@@ -65,7 +77,29 @@ function createWindowsDriver(): INativeDriver {
 		"bool __stdcall GetCursorPos(_Out_ POINT *lpPoint)",
 	)
 	const SetCursorPos = user32.func("bool __stdcall SetCursorPos(int X, int Y)")
+	const GetSystemMetrics = user32.func("int __stdcall GetSystemMetrics(int nIndex)")
 	const SZ = koffi.sizeof(INPUT)
+
+	const screenW = GetSystemMetrics(0) || 1920
+	const screenH = GetSystemMetrics(1) || 1080
+
+	const InitializeTouchInjection = user32.func(
+		"bool __stdcall InitializeTouchInjection(uint32_t maxCount, uint32_t dwMode)",
+	)
+	const InjectTouchInput = user32.func(
+		"bool __stdcall InjectTouchInput(uint32_t count, const void *contacts)",
+	)
+	let touchInjectionReady = false
+	try {
+		touchInjectionReady = InitializeTouchInjection(10, 0x1)
+		if (touchInjectionReady) console.log("Windows Touch Injection initialized.")
+		else console.warn("InitializeTouchInjection returned false, falling back to SendInput for touch.")
+	} catch (e) {
+		console.warn("InitializeTouchInjection not available, falling back to SendInput for touch.", e)
+	}
+
+	const touchIdMap = new Map<number, number>()
+	let nextTouchPid = 0
 
 	return {
 		moveMouse(dx, dy) {
@@ -107,6 +141,81 @@ function createWindowsDriver(): INativeDriver {
 				], SZ)
 			}
 		},
+		touch(contacts) {
+			if (contacts.length === 0) return
+
+			if (touchInjectionReady) {
+				const count = contacts.length
+				const STRUCT_SIZE = 144
+				const buffer = Buffer.alloc(STRUCT_SIZE * count)
+
+				for (let i = 0; i < count; i++) {
+					const c = contacts[i]
+					const x = Math.max(0, Math.min(screenW - 1, Math.round(c.x * screenW)))
+					const y = Math.max(0, Math.min(screenH - 1, Math.round(c.y * screenH)))
+
+					if (!touchIdMap.has(c.id)) {
+						touchIdMap.set(c.id, nextTouchPid++ % 10)
+					}
+					const pid = touchIdMap.get(c.id)!
+
+					const POINTER_FLAG_INRANGE = 0x00000002
+					const POINTER_FLAG_INCONTACT = 0x00000004
+					const POINTER_FLAG_DOWN = 0x00010000
+					const POINTER_FLAG_UPDATE = 0x00020000
+					const POINTER_FLAG_UP = 0x00040000
+
+					let flags = POINTER_FLAG_DOWN | POINTER_FLAG_INRANGE | POINTER_FLAG_INCONTACT
+					if (c.type === "move") flags = POINTER_FLAG_UPDATE | POINTER_FLAG_INRANGE | POINTER_FLAG_INCONTACT
+					else if (c.type === "end") {
+						flags = POINTER_FLAG_UP
+						touchIdMap.delete(c.id)
+					}
+
+					const off = i * STRUCT_SIZE
+					buffer.writeUInt32LE(0x02, off + 0)
+					buffer.writeUInt32LE(pid, off + 4)
+					buffer.writeUInt32LE(0, off + 8)
+					buffer.writeUInt32LE(flags, off + 12)
+
+					buffer.writeInt32LE(x, off + 32)
+					buffer.writeInt32LE(y, off + 36)
+					buffer.writeInt32LE(x, off + 40)
+					buffer.writeInt32LE(y, off + 44)
+					buffer.writeInt32LE(x, off + 48)
+					buffer.writeInt32LE(y, off + 52)
+
+					buffer.writeUInt32LE(0, off + 96)
+					buffer.writeUInt32LE(0x01 | 0x02, off + 100)
+
+					buffer.writeInt32LE(x - 2, off + 104)
+					buffer.writeInt32LE(y - 2, off + 108)
+					buffer.writeInt32LE(x + 2, off + 112)
+					buffer.writeInt32LE(y + 2, off + 116)
+				}
+
+				const ok = InjectTouchInput(count, buffer)
+				if (!ok) {
+					touchFallback(contacts)
+				}
+			} else {
+				touchFallback(contacts)
+			}
+		},
+	}
+
+	function touchFallback(contacts: TouchContact[]) {
+		const first = contacts[0]
+		if (!first) return
+		const absX = Math.round(first.x * 65535)
+		const absY = Math.round(first.y * 65535)
+
+		let mouseFlags = MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK
+		if (first.type === "start") mouseFlags |= MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_MOVE
+		else if (first.type === "move") mouseFlags |= MOUSEEVENTF_MOVE
+		else if (first.type === "end") mouseFlags |= MOUSEEVENTF_LEFTUP
+
+		SendInput(1, [{ type: INPUT_MOUSE, u: { mi: { dx: absX, dy: absY, mouseData: 0, dwFlags: mouseFlags, time: 0, dwExtraInfo: 0 } } }], SZ)
 	}
 }
 
@@ -126,14 +235,14 @@ function createLinuxDriver(): INativeDriver {
 		code: "uint16_t",
 		value: "int32_t",
 	})
-	const uinput_setup = koffi.struct("uinput_setup", {
+	const _uinput_setup = koffi.struct("uinput_setup", {
 		id_bustype: "uint16_t",
 		id_vendor: "uint16_t",
 		id_product: "uint16_t",
 		id_version: "uint16_t",
 		name: koffi.array("char", 80),
 		ff_effects_max: "uint32_t",
-	})
+	}); void _uinput_setup
 	const EVENT_SIZE = koffi.sizeof(input_event)
 
 	const open = libc.func("int open(const char *path, int flags)")
@@ -158,6 +267,14 @@ function createLinuxDriver(): INativeDriver {
 	const BTN_LEFT = 0x110
 	const BTN_RIGHT = 0x111
 	const BTN_MIDDLE = 0x112
+	const BTN_TOUCH = 0x14a
+	const ABS_MT_SLOT = 0x2f
+	const ABS_MT_TRACKING_ID = 0x39
+	const ABS_MT_POSITION_X = 0x35
+	const ABS_MT_POSITION_Y = 0x36
+
+	const EV_ABS = 0x03
+	const UI_SET_ABSBIT = 0x40045567
 
 	let fd = -1
 	try {
@@ -173,13 +290,19 @@ function createLinuxDriver(): INativeDriver {
 		ioctl_int(fd, UI_SET_EVBIT, EV_KEY)
 		ioctl_int(fd, UI_SET_EVBIT, EV_REL)
 		ioctl_int(fd, UI_SET_EVBIT, EV_SYN)
+		ioctl_int(fd, UI_SET_EVBIT, EV_ABS)
 		ioctl_int(fd, UI_SET_KEYBIT, BTN_LEFT)
 		ioctl_int(fd, UI_SET_KEYBIT, BTN_RIGHT)
 		ioctl_int(fd, UI_SET_KEYBIT, BTN_MIDDLE)
+		ioctl_int(fd, UI_SET_KEYBIT, BTN_TOUCH)
 		ioctl_int(fd, UI_SET_RELBIT, REL_X)
 		ioctl_int(fd, UI_SET_RELBIT, REL_Y)
 		ioctl_int(fd, UI_SET_RELBIT, REL_WHEEL)
 		ioctl_int(fd, UI_SET_RELBIT, REL_HWHEEL)
+		ioctl_int(fd, UI_SET_ABSBIT, ABS_MT_SLOT)
+		ioctl_int(fd, UI_SET_ABSBIT, ABS_MT_TRACKING_ID)
+		ioctl_int(fd, UI_SET_ABSBIT, ABS_MT_POSITION_X)
+		ioctl_int(fd, UI_SET_ABSBIT, ABS_MT_POSITION_Y)
 		for (let i = 1; i < 256; i++) ioctl_int(fd, UI_SET_KEYBIT, i)
 
 		const setup: any = {
@@ -199,11 +322,18 @@ function createLinuxDriver(): INativeDriver {
 		return createStubDriver()
 	}
 
-	const emit = (type: number, code: number, value: number) => {
+	const emitRaw = (type: number, code: number, value: number) => {
 		if (fd < 0) return
 		write_event(fd, { tv_sec: 0, tv_usec: 0, type, code, value }, EVENT_SIZE)
-		write_event(fd, { tv_sec: 0, tv_usec: 0, type: EV_SYN, code: 0, value: 0 }, EVENT_SIZE)
 	}
+	const syn = () => { emitRaw(EV_SYN, 0, 0) }
+	const emit = (type: number, code: number, value: number) => {
+		emitRaw(type, code, value)
+		syn()
+	}
+
+	const linuxTouchSlots = new Map<number, number>()
+	let nextSlot = 0
 
 	return {
 		moveMouse(dx, dy) { emit(EV_REL, REL_X, dx); emit(EV_REL, REL_Y, dy); },
@@ -234,6 +364,26 @@ function createLinuxDriver(): INativeDriver {
 				}
 			}
 		},
+		touch(contacts) {
+			for (const c of contacts) {
+				if (c.type === "start" && !linuxTouchSlots.has(c.id)) {
+					linuxTouchSlots.set(c.id, nextSlot++ % 10)
+				}
+				const slot = linuxTouchSlots.get(c.id)
+				if (slot === undefined) continue
+
+				emitRaw(EV_ABS, ABS_MT_SLOT, slot)
+				if (c.type === "end") {
+					emitRaw(EV_ABS, ABS_MT_TRACKING_ID, -1)
+					linuxTouchSlots.delete(c.id)
+				} else {
+					if (c.type === "start") emitRaw(EV_ABS, ABS_MT_TRACKING_ID, c.id)
+					emitRaw(EV_ABS, ABS_MT_POSITION_X, Math.round(c.x * 32767))
+					emitRaw(EV_ABS, ABS_MT_POSITION_Y, Math.round(c.y * 32767))
+				}
+			}
+			syn()
+		},
 	}
 }
 
@@ -259,10 +409,10 @@ function createMacOSDriver(): INativeDriver {
 
 	const kCGScrollEventUnitPixel = 1
 
-	const CGPoint = koffi.struct("CGPoint", {
+	const _CGPoint = koffi.struct("CGPoint", {
 		x: "double",
 		y: "double",
-	})
+	}); void _CGPoint
 
 	const CGEventSourceCreate = cg.func("void* CGEventSourceCreate(int32_t stateID)")
 	const CGEventCreateMouseEvent = cg.func(
@@ -367,12 +517,23 @@ function createMacOSDriver(): INativeDriver {
 				CFRelease(up)
 			}
 		},
+		touch(contacts) {
+			if (contacts.length === 0) return
+			const first = contacts[0]
+			if (first.type === "move" || first.type === "start") {
+				const event = CGEventCreateMouseEvent(
+					source, kCGEventMouseMoved,
+					{ x: first.x * 1920, y: first.y * 1080 }, 0
+				)
+				postEvent(event)
+			}
+		},
 	}
 }
 
 function createStubDriver(): INativeDriver {
 	return {
-		moveMouse: () => { }, click: () => { }, scroll: () => { }, keyTap: () => { }, keyToggle: () => { }, typeText: () => { },
+		moveMouse: () => { }, click: () => { }, scroll: () => { }, keyTap: () => { }, keyToggle: () => { }, typeText: () => { }, touch: () => { },
 	}
 }
 
