@@ -290,20 +290,63 @@ function createLinuxDriver(): INativeDriver {
 		ioctl_int(fd, UI_SET_EVBIT, EV_KEY)
 		ioctl_int(fd, UI_SET_EVBIT, EV_REL)
 		ioctl_int(fd, UI_SET_EVBIT, EV_SYN)
-		ioctl_int(fd, UI_SET_EVBIT, EV_ABS)
 		ioctl_int(fd, UI_SET_KEYBIT, BTN_LEFT)
 		ioctl_int(fd, UI_SET_KEYBIT, BTN_RIGHT)
 		ioctl_int(fd, UI_SET_KEYBIT, BTN_MIDDLE)
-		ioctl_int(fd, UI_SET_KEYBIT, BTN_TOUCH)
 		ioctl_int(fd, UI_SET_RELBIT, REL_X)
 		ioctl_int(fd, UI_SET_RELBIT, REL_Y)
 		ioctl_int(fd, UI_SET_RELBIT, REL_WHEEL)
 		ioctl_int(fd, UI_SET_RELBIT, REL_HWHEEL)
-		ioctl_int(fd, UI_SET_ABSBIT, ABS_MT_SLOT)
-		ioctl_int(fd, UI_SET_ABSBIT, ABS_MT_TRACKING_ID)
-		ioctl_int(fd, UI_SET_ABSBIT, ABS_MT_POSITION_X)
-		ioctl_int(fd, UI_SET_ABSBIT, ABS_MT_POSITION_Y)
 		for (let i = 1; i < 256; i++) ioctl_int(fd, UI_SET_KEYBIT, i)
+
+		try {
+			ioctl_int(fd, UI_SET_EVBIT, EV_ABS)
+			ioctl_int(fd, UI_SET_KEYBIT, BTN_TOUCH)
+			ioctl_int(fd, UI_SET_ABSBIT, ABS_MT_SLOT)
+			ioctl_int(fd, UI_SET_ABSBIT, ABS_MT_TRACKING_ID)
+			ioctl_int(fd, UI_SET_ABSBIT, ABS_MT_POSITION_X)
+			ioctl_int(fd, UI_SET_ABSBIT, ABS_MT_POSITION_Y)
+
+			const UI_ABS_SETUP = 0x401c5504
+			const absSetup = Buffer.alloc(28)
+
+			absSetup.writeUInt16LE(ABS_MT_SLOT, 0)
+			absSetup.writeInt32LE(0, 4)
+			absSetup.writeInt32LE(9, 8)
+			absSetup.writeInt32LE(0, 12)
+			absSetup.writeInt32LE(0, 16)
+			absSetup.writeInt32LE(0, 20)
+			ioctl_ptr(fd, UI_ABS_SETUP, absSetup)
+
+			const posSetupX = Buffer.alloc(28)
+			posSetupX.writeUInt16LE(ABS_MT_POSITION_X, 0)
+			posSetupX.writeInt32LE(0, 4)
+			posSetupX.writeInt32LE(32767, 8)
+			posSetupX.writeInt32LE(0, 12)
+			posSetupX.writeInt32LE(0, 16)
+			posSetupX.writeInt32LE(0, 20)
+			ioctl_ptr(fd, UI_ABS_SETUP, posSetupX)
+
+			const posSetupY = Buffer.alloc(28)
+			posSetupY.writeUInt16LE(ABS_MT_POSITION_Y, 0)
+			posSetupY.writeInt32LE(0, 4)
+			posSetupY.writeInt32LE(32767, 8)
+			posSetupY.writeInt32LE(0, 12)
+			posSetupY.writeInt32LE(0, 16)
+			posSetupY.writeInt32LE(0, 20)
+			ioctl_ptr(fd, UI_ABS_SETUP, posSetupY)
+
+			const trackSetup = Buffer.alloc(28)
+			trackSetup.writeUInt16LE(ABS_MT_TRACKING_ID, 0)
+			trackSetup.writeInt32LE(0, 4)
+			trackSetup.writeInt32LE(65535, 8)
+			trackSetup.writeInt32LE(0, 12)
+			trackSetup.writeInt32LE(0, 16)
+			trackSetup.writeInt32LE(0, 20)
+			ioctl_ptr(fd, UI_ABS_SETUP, trackSetup)
+		} catch {
+			console.warn("Multi-touch setup skipped (kernel may not support it)")
+		}
 
 		const setup: any = {
 			id_bustype: 0x03,
