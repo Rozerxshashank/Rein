@@ -267,14 +267,6 @@ function createLinuxDriver(): INativeDriver {
 	const BTN_LEFT = 0x110
 	const BTN_RIGHT = 0x111
 	const BTN_MIDDLE = 0x112
-	const BTN_TOUCH = 0x14a
-	const ABS_MT_SLOT = 0x2f
-	const ABS_MT_TRACKING_ID = 0x39
-	const ABS_MT_POSITION_X = 0x35
-	const ABS_MT_POSITION_Y = 0x36
-
-	const EV_ABS = 0x03
-	const UI_SET_ABSBIT = 0x40045567
 
 	let fd = -1
 	try {
@@ -299,55 +291,6 @@ function createLinuxDriver(): INativeDriver {
 		ioctl_int(fd, UI_SET_RELBIT, REL_HWHEEL)
 		for (let i = 1; i < 256; i++) ioctl_int(fd, UI_SET_KEYBIT, i)
 
-		try {
-			ioctl_int(fd, UI_SET_EVBIT, EV_ABS)
-			ioctl_int(fd, UI_SET_KEYBIT, BTN_TOUCH)
-			ioctl_int(fd, UI_SET_ABSBIT, ABS_MT_SLOT)
-			ioctl_int(fd, UI_SET_ABSBIT, ABS_MT_TRACKING_ID)
-			ioctl_int(fd, UI_SET_ABSBIT, ABS_MT_POSITION_X)
-			ioctl_int(fd, UI_SET_ABSBIT, ABS_MT_POSITION_Y)
-
-			const UI_ABS_SETUP = 0x401c5504
-			const absSetup = Buffer.alloc(28)
-
-			absSetup.writeUInt16LE(ABS_MT_SLOT, 0)
-			absSetup.writeInt32LE(0, 4)
-			absSetup.writeInt32LE(9, 8)
-			absSetup.writeInt32LE(0, 12)
-			absSetup.writeInt32LE(0, 16)
-			absSetup.writeInt32LE(0, 20)
-			ioctl_ptr(fd, UI_ABS_SETUP, absSetup)
-
-			const posSetupX = Buffer.alloc(28)
-			posSetupX.writeUInt16LE(ABS_MT_POSITION_X, 0)
-			posSetupX.writeInt32LE(0, 4)
-			posSetupX.writeInt32LE(32767, 8)
-			posSetupX.writeInt32LE(0, 12)
-			posSetupX.writeInt32LE(0, 16)
-			posSetupX.writeInt32LE(0, 20)
-			ioctl_ptr(fd, UI_ABS_SETUP, posSetupX)
-
-			const posSetupY = Buffer.alloc(28)
-			posSetupY.writeUInt16LE(ABS_MT_POSITION_Y, 0)
-			posSetupY.writeInt32LE(0, 4)
-			posSetupY.writeInt32LE(32767, 8)
-			posSetupY.writeInt32LE(0, 12)
-			posSetupY.writeInt32LE(0, 16)
-			posSetupY.writeInt32LE(0, 20)
-			ioctl_ptr(fd, UI_ABS_SETUP, posSetupY)
-
-			const trackSetup = Buffer.alloc(28)
-			trackSetup.writeUInt16LE(ABS_MT_TRACKING_ID, 0)
-			trackSetup.writeInt32LE(0, 4)
-			trackSetup.writeInt32LE(65535, 8)
-			trackSetup.writeInt32LE(0, 12)
-			trackSetup.writeInt32LE(0, 16)
-			trackSetup.writeInt32LE(0, 20)
-			ioctl_ptr(fd, UI_ABS_SETUP, trackSetup)
-		} catch {
-			console.warn("Multi-touch setup skipped (kernel may not support it)")
-		}
-
 		const setup: any = {
 			id_bustype: 0x03,
 			id_vendor: 0x1234,
@@ -365,18 +308,11 @@ function createLinuxDriver(): INativeDriver {
 		return createStubDriver()
 	}
 
-	const emitRaw = (type: number, code: number, value: number) => {
+	const emit = (type: number, code: number, value: number) => {
 		if (fd < 0) return
 		write_event(fd, { tv_sec: 0, tv_usec: 0, type, code, value }, EVENT_SIZE)
+		write_event(fd, { tv_sec: 0, tv_usec: 0, type: EV_SYN, code: 0, value: 0 }, EVENT_SIZE)
 	}
-	const syn = () => { emitRaw(EV_SYN, 0, 0) }
-	const emit = (type: number, code: number, value: number) => {
-		emitRaw(type, code, value)
-		syn()
-	}
-
-	const linuxTouchSlots = new Map<number, number>()
-	let nextSlot = 0
 
 	return {
 		moveMouse(dx, dy) { emit(EV_REL, REL_X, dx); emit(EV_REL, REL_Y, dy); },
@@ -407,26 +343,7 @@ function createLinuxDriver(): INativeDriver {
 				}
 			}
 		},
-		touch(contacts) {
-			for (const c of contacts) {
-				if (c.type === "start" && !linuxTouchSlots.has(c.id)) {
-					linuxTouchSlots.set(c.id, nextSlot++ % 10)
-				}
-				const slot = linuxTouchSlots.get(c.id)
-				if (slot === undefined) continue
-
-				emitRaw(EV_ABS, ABS_MT_SLOT, slot)
-				if (c.type === "end") {
-					emitRaw(EV_ABS, ABS_MT_TRACKING_ID, -1)
-					linuxTouchSlots.delete(c.id)
-				} else {
-					if (c.type === "start") emitRaw(EV_ABS, ABS_MT_TRACKING_ID, c.id)
-					emitRaw(EV_ABS, ABS_MT_POSITION_X, Math.round(c.x * 32767))
-					emitRaw(EV_ABS, ABS_MT_POSITION_Y, Math.round(c.y * 32767))
-				}
-			}
-			syn()
-		},
+		touch() {},
 	}
 }
 
