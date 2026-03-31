@@ -26,6 +26,9 @@ const SIGNAL_TTL_MS = 30_000
 const MAX_STORE_SIZE = 200
 const clientCursors = new Map<string, number>()
 
+// SSE: Map of sessionId -> Set of SSE response objects
+const sseClients = new Map<string, Set<ServerResponse>>()
+
 function cleanupSignals() {
 	const now = Date.now()
 	while (signalStore.length > 0 && now - signalStore[0].timestamp > SIGNAL_TTL_MS) {
@@ -37,6 +40,21 @@ function cleanupSignals() {
 	for (const [cid, cursor] of clientCursors) {
 		if (signalStore.length === 0 || cursor < (signalStore[0]?.id ?? 0) - 100) {
 			clientCursors.delete(cid)
+		}
+	}
+}
+
+/** Push a signal payload to all SSE listeners for a given sessionId (excluding the sender). */
+function broadcastSignalSSE(senderSessionId: string, payload: unknown) {
+	for (const [sessionId, clients] of sseClients) {
+		if (sessionId === senderSessionId) continue
+		for (const res of clients) {
+			try {
+				const data = JSON.stringify(payload)
+				res.write(`data: ${data}\n\n`)
+			} catch {
+				// Client may have disconnected
+			}
 		}
 	}
 }
@@ -93,11 +111,13 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 		return true
 	}
 
+	// ── GET /api/ip ──────────────────────────────────────────────
 	if (path === "/api/ip" && req.method === "GET") {
 		json(res, 200, { ip: LAN_IP })
 		return true
 	}
 
+	// ── POST /api/token ──────────────────────────────────────────
 	if (path === "/api/token" && req.method === "POST") {
 		if (!isLocalhost(req)) {
 			json(res, 403, { error: "Forbidden" })
@@ -109,6 +129,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 		return true
 	}
 
+	// ── POST /api/token/verify ───────────────────────────────────
 	if (path === "/api/token/verify" && req.method === "POST") {
 		try {
 			const body = JSON.parse(await readBody(req))
@@ -120,6 +141,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 		return true
 	}
 
+	// ── POST /api/signal ─────────────────────────────────────────
 	if (path === "/api/signal" && req.method === "POST") {
 		try {
 			const body = JSON.parse(await readBody(req))
@@ -131,6 +153,10 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 			signalIdCounter++
 			signalStore.push({ sessionId, payload, timestamp: Date.now(), id: signalIdCounter })
 			while (signalStore.length > MAX_STORE_SIZE) signalStore.shift()
+
+			// Push to all SSE listeners (excluding sender)
+			broadcastSignalSSE(sessionId, payload)
+
 			json(res, 200, { ok: true })
 		} catch (e) {
 			logger.error(`Failed to parse signal body: ${String(e)}`)
@@ -139,21 +165,73 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 		return true
 	}
 
-	const signalMatch = path.match(/^\/api\/signal\/(.+)$/)
-	if (signalMatch && req.method === "GET") {
-		const sessionId = signalMatch[1]
-		cleanupSignals()
-		const cursor = clientCursors.get(sessionId) || 0
-		const newMessages = signalStore.filter(
+	// ── GET /api/signal/ice (SSE) ────────────────────────────────
+	if (path === "/api/signal/ice" && req.method === "GET") {
+		const sessionId = url.searchParams.get("sessionId")
+		if (!sessionId) {
+			json(res, 400, { error: "Missing sessionId query parameter" })
+			return true
+		}
+
+		// Set up SSE headers
+		res.writeHead(200, {
+			"Content-Type": "text/event-stream",
+			"Cache-Control": "no-cache",
+			"Connection": "keep-alive",
+			"Access-Control-Allow-Origin": "*",
+			"X-Accel-Buffering": "no",
+		})
+		res.write("\n")
+
+		// Register this client
+		if (!sseClients.has(sessionId)) {
+			sseClients.set(sessionId, new Set())
+		}
+		sseClients.get(sessionId)!.add(res)
+		logger.info(`SSE client connected: ${sessionId}`)
+
+		// For new sessions, start from current position (don't replay stale signals)
+		const cursor = clientCursors.get(sessionId) ?? signalIdCounter
+		const pending = signalStore.filter(
 			(m) => m.id > cursor && m.sessionId !== sessionId
 		)
-		if (newMessages.length > 0) {
-			clientCursors.set(sessionId, newMessages[newMessages.length - 1].id)
+		for (const msg of pending) {
+			const data = JSON.stringify(msg.payload)
+			res.write(`data: ${data}\n\n`)
 		}
-		json(res, 200, { messages: newMessages.map((m) => m.payload) })
+		if (pending.length > 0) {
+			clientCursors.set(sessionId, pending[pending.length - 1].id)
+		}
+
+		// Heartbeat to keep connection alive
+		const heartbeat = setInterval(() => {
+			try {
+				res.write(": heartbeat\n\n")
+			} catch {
+				clearInterval(heartbeat)
+			}
+		}, 15_000)
+
+		// Clean up on disconnect
+		const cleanup = () => {
+			clearInterval(heartbeat)
+			const clients = sseClients.get(sessionId)
+			if (clients) {
+				clients.delete(res)
+				if (clients.size === 0) {
+					sseClients.delete(sessionId)
+				}
+			}
+			logger.info(`SSE client disconnected: ${sessionId}`)
+		}
+
+		req.on("close", cleanup)
+		req.on("error", cleanup)
+
 		return true
 	}
 
+	// ── POST /api/input ──────────────────────────────────────────
 	if (path === "/api/input" && req.method === "POST") {
 		try {
 			const body = JSON.parse(await readBody(req))
@@ -166,6 +244,34 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 			json(res, 200, { ok: true })
 		} catch {
 			json(res, 400, { error: "Invalid input" })
+		}
+		return true
+	}
+
+	// ── POST /api/config ─────────────────────────────────────────
+	if (path === "/api/config" && req.method === "POST") {
+		if (!isLocalhost(req)) {
+			json(res, 403, { error: "Forbidden" })
+			return true
+		}
+		try {
+			const body = JSON.parse(await readBody(req))
+			const configPath = "./src/server-config.json"
+			let config: Record<string, unknown> = {}
+			if (fs.existsSync(configPath)) {
+				try {
+					config = JSON.parse(fs.readFileSync(configPath, "utf-8")) as Record<string, unknown>
+				} catch {
+					// ignore parse errors on existing file
+				}
+			}
+			if (typeof body.frontendPort === "number") {
+				config.frontendPort = body.frontendPort
+			}
+			fs.writeFileSync(configPath, JSON.stringify(config, null, "\t"), "utf-8")
+			json(res, 200, { ok: true })
+		} catch {
+			json(res, 400, { error: "Invalid config body" })
 		}
 		return true
 	}

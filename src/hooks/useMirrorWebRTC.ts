@@ -3,107 +3,61 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useConnection } from "../contexts/ConnectionProvider"
 
+/**
+ * useMirrorWebRTC — Runs on the Phone (Client).
+ *
+ * This hook now receives the screen mirror stream from the UNIFIED
+ * RTCPeerConnection managed by ConnectionProvider. It subscribes to
+ * "mirror-stream" events instead of creating its own peer connection.
+ *
+ * The desktop peer adds a media track to the shared P2P connection,
+ * and ConnectionProvider's `pc.ontrack` fires, which broadcasts the
+ * stream to all "mirror-stream" subscribers.
+ */
 export function useMirrorWebRTC() {
-	const { postSignal, pollSignals, sessionId } = useConnection()
-	const pcRef = useRef<RTCPeerConnection | null>(null)
+	const { subscribe } = useConnection()
 	const [stream, setStream] = useState<MediaStream | null>(null)
 	const [mirrorStatus, setMirrorStatus] = useState<"idle" | "negotiating" | "streaming">("idle")
-	const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+	const isMountedRef = useRef(true)
 
-	const cleanup = useCallback(() => {
-		if (pollIntervalRef.current) {
-			clearInterval(pollIntervalRef.current)
-			pollIntervalRef.current = null
+	const handleStream = useCallback((s: unknown) => {
+		if (!isMountedRef.current) return
+		if (s instanceof MediaStream) {
+			setStream(s)
+			setMirrorStatus("streaming")
+		} else {
+			setStream(null)
+			setMirrorStatus("idle")
 		}
-		if (pcRef.current) {
-			pcRef.current.close()
-			pcRef.current = null
-		}
-		setStream(null)
-		setMirrorStatus("idle")
 	}, [])
 
-	const createPeerConnection = useCallback(() => {
-		if (pcRef.current) pcRef.current.close()
-
-		const pc = new RTCPeerConnection({
-			iceServers: [{ urls: "stun:stun1.l.google.com:19302" }],
-		})
-
-		pc.ontrack = (e) => {
-			if (e.streams?.[0]) {
-				setStream(e.streams[0])
-				setMirrorStatus("streaming")
-			}
+	const handleStatus = useCallback((s: unknown) => {
+		if (!isMountedRef.current) return
+		if (s === "negotiating") {
+			setMirrorStatus("negotiating")
+		} else if (s === "idle") {
+			setMirrorStatus("idle")
+			setStream(null)
 		}
-
-		pc.onicecandidate = (e) => {
-			if (e.candidate) {
-				postSignal({
-					type: "webrtc-signaling",
-					signalingType: "ice-candidate",
-					candidate: e.candidate,
-					from: sessionId,
-				})
-			}
-		}
-
-		pc.onconnectionstatechange = () => {
-			if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
-				cleanup()
-			}
-		}
-
-		pcRef.current = pc
-		return pc
-	}, [postSignal, sessionId, cleanup])
-
-	const startPolling = useCallback(() => {
-		if (pollIntervalRef.current) return
-
-		pollIntervalRef.current = setInterval(async () => {
-			const messages = await pollSignals()
-			for (const msg of messages) {
-				const signal = msg as any
-
-				if (signal.type === "start-mirror" && signal.from !== sessionId) {
-					setMirrorStatus("negotiating")
-				}
-
-				if (signal.type === "stop-mirror") {
-					cleanup()
-					continue
-				}
-
-				if (signal.type !== "webrtc-signaling" || signal.from === sessionId) continue
-
-				if (signal.signalingType === "offer") {
-					const pc = createPeerConnection()
-					await pc.setRemoteDescription(signal.sdp)
-					const answer = await pc.createAnswer()
-					await pc.setLocalDescription(answer)
-
-					await postSignal({
-						type: "webrtc-signaling",
-						signalingType: "answer",
-						sdp: answer,
-						from: sessionId,
-					})
-					setMirrorStatus("negotiating")
-				} else if (signal.signalingType === "ice-candidate" && pcRef.current) {
-					await pcRef.current.addIceCandidate(signal.candidate)
-				}
-			}
-		}, 500)
-	}, [pollSignals, sessionId, createPeerConnection, postSignal, cleanup])
+	}, [])
 
 	useEffect(() => {
+		isMountedRef.current = true
+
 		const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
-		if (isMobile) {
-			startPolling()
+		if (!isMobile) {
+			return () => { isMountedRef.current = false }
 		}
-		return () => cleanup()
-	}, [startPolling, cleanup])
+
+		const unsubStream = subscribe("mirror-stream", handleStream)
+		const unsubStatus = subscribe("mirror-status", handleStatus)
+
+		return () => {
+			isMountedRef.current = false
+			unsubStream()
+			unsubStatus()
+		}
+	}, [subscribe, handleStream, handleStatus])
 
 	return { stream, mirrorStatus }
 }

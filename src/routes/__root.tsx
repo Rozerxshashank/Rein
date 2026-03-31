@@ -12,7 +12,7 @@ import {
 	ConnectionProvider,
 	useConnection,
 } from "../contexts/ConnectionProvider"
-import { useCaptureProvider } from "../hooks/useCaptureProvider"
+import { useDesktopPeer } from "../hooks/useDesktopPeer"
 
 export const Route = createRootRoute({
 	component: AppWithConnection,
@@ -45,7 +45,7 @@ function RootComponent() {
 
 function DesktopCaptureProvider() {
 	const { status } = useConnection()
-	const { startSharing } = useCaptureProvider()
+	const { startSharing } = useDesktopPeer()
 	const hasStartedRef = useRef(false)
 
 	useEffect(() => {
