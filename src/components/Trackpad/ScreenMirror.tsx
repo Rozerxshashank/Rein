@@ -36,7 +36,6 @@ export const ScreenMirror = ({
 			<video
 				ref={videoRef}
 				autoPlay
-				muted
 				playsInline
 				className={`w-full h-full object-contain transition-opacity duration-500 ${
 					hasStream ? "opacity-100" : "opacity-0"

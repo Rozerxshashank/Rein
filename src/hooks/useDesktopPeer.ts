@@ -165,7 +165,7 @@ export function useDesktopPeer() {
 		try {
 			const stream = await navigator.mediaDevices.getDisplayMedia({
 				video: true,
-				audio: false,
+				audio: true,
 			})
 			streamRef.current = stream
 
