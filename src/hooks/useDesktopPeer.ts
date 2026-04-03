@@ -160,13 +160,51 @@ export function useDesktopPeer() {
 
 	/** Start screen sharing and add the media track to the peer connection. */
 	const startSharing = useCallback(async () => {
-		if (!navigator.mediaDevices?.getDisplayMedia) return
-
 		try {
-			const stream = await navigator.mediaDevices.getDisplayMedia({
-				video: true,
-				audio: true,
-			})
+			let stream: MediaStream
+
+			// ── Electron Native Flow ──
+			const electron = (window as any).electron
+			if (electron?.showSourcePicker) {
+				// Use the new "show-source-picker" IPC if available, else fallback
+				const sourceId = await (electron.showSourcePicker 
+					? electron.showSourcePicker() 
+					: Promise.resolve(null))
+				
+				if (sourceId) {
+					stream = await navigator.mediaDevices.getUserMedia({
+						audio: {
+							mandatory: { chromeMediaSource: "desktop" },
+						},
+						video: {
+							mandatory: {
+								chromeMediaSource: "desktop",
+								chromeMediaSourceId: sourceId,
+							},
+						},
+					} as any)
+				} else {
+					// Fallback to getDisplayMedia if no sourceId or not Electron-native enough
+					if (!navigator.mediaDevices?.getDisplayMedia) {
+						throw new Error("getDisplayMedia not supported")
+					}
+					stream = await navigator.mediaDevices.getDisplayMedia({
+						video: true,
+						audio: true,
+					})
+				}
+			} else {
+				// ── Standard Browser Flow ──
+				console.log("[useDesktopPeer] Browser detected. Calling getDisplayMedia()...")
+				if (!navigator.mediaDevices?.getDisplayMedia) {
+					throw new Error("getDisplayMedia not supported in this browser")
+				}
+				stream = await navigator.mediaDevices.getDisplayMedia({
+					video: true,
+					audio: true,
+				})
+			}
+
 			streamRef.current = stream
 
 			const pc = pcRef.current
@@ -207,8 +245,8 @@ export function useDesktopPeer() {
 					from: sessionId,
 				})
 			}
-		} catch {
-			console.warn("[DesktopPeer] Failed to start screen sharing")
+		} catch (err) {
+			console.error("[useDesktopPeer] ERROR: Failed to start screen sharing!", err)
 		}
 	}, [postSignal, sessionId, configureMediaSender])
 

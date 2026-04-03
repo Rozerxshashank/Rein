@@ -44,21 +44,18 @@ function RootComponent() {
 }
 
 function DesktopCaptureProvider() {
-	const { status } = useConnection()
-	const { startSharing } = useDesktopPeer()
+	const { startSharing, peerConnected } = useDesktopPeer()
 	const hasStartedRef = useRef(false)
 
 	useEffect(() => {
-		if (status !== "connected" || hasStartedRef.current) return
+		// Attempt to start sharing automatically when a peer connects.
+		// In Electron, this will be seamless (Zero-Touch).
+		// In a browser, it will attempt to open the picker, but may require a user gesture.
+		if (!peerConnected || hasStartedRef.current) return
 
-		const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
-		const canShare = !!navigator.mediaDevices?.getDisplayMedia
-
-		if (!isMobile && canShare) {
-			hasStartedRef.current = true
-			startSharing()
-		}
-	}, [status, startSharing])
+		hasStartedRef.current = true
+		startSharing()
+	}, [peerConnected, startSharing])
 
 	return null
 }
