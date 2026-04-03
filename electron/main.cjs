@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, shell, desktopCapturer, ipcMain, session } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
@@ -67,42 +67,27 @@ function waitForServer(port, retries = 60) {
   });
 }
 
-// ─── Start Production Nitro Server ──────────────────────────────────────────
-function resolveServerPath() {
-  // Packaged production: resources/app.asar.unpacked/.output/server/index.mjs
-  // OR resources/.output/server/index.mjs (extraResources)
-  const candidates = [
-    path.join(process.resourcesPath, 'app.asar.unpacked', '.output', 'server', 'index.mjs'),
-    path.join(process.resourcesPath, '.output', 'server', 'index.mjs'),
-    // Dev fallback (running `npm run electron` without packaging)
-    path.join(__dirname, '..', '.output', 'server', 'index.mjs'),
-  ];
-  for (const p of candidates) {
-    if (fs.existsSync(p)) return p;
-  }
-  return null;
-}
-
+// ─── Start Production Server (vite preview) ─────────────────────────────────
+// vite preview serves the built output AND runs configurePreviewServer
+// which attaches all /api/* routes (signal, token, ip, input).
 function startProductionServer() {
   return new Promise((resolve, reject) => {
-    const serverPath = resolveServerPath();
-    if (!serverPath) {
-      reject(new Error('Could not find .output/server/index.mjs — run `npm run build` first'));
-      return;
-    }
+    console.log('[Rein] Starting production server via vite preview on port', serverPort);
 
-    console.log('[Rein] Starting production server:', serverPath);
+    const isWin = process.platform === 'win32';
 
-    serverProcess = spawn(process.execPath, [serverPath], {
-      stdio: IS_DEV ? 'inherit' : 'ignore',
-      windowsHide: true,
-      env: {
-        ...process.env,
-        HOST: serverHost,
-        PORT: String(serverPort),
-        NODE_ENV: 'production',
-      },
-    });
+    // Use shell:true — required on Windows for npx/npm scripts, harmless on macOS/Linux
+    serverProcess = spawn(
+      'npx',
+      ['vite', 'preview', '--host', '--port', String(serverPort)],
+      {
+        stdio: 'ignore',
+        windowsHide: true,
+        shell: true,
+        cwd: path.join(__dirname, '..'),
+        env: { ...process.env, NODE_ENV: 'production' },
+      }
+    );
 
     serverProcess.on('error', (err) => {
       console.error('[Rein] Server process error:', err);
@@ -123,6 +108,7 @@ function createWindow() {
     show: false,
     title: 'Rein',
     webPreferences: {
+      preload: path.join(__dirname, 'main-preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       // Allow camera / mic / screen capture
@@ -154,6 +140,118 @@ function createWindow() {
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
     mainWindow.focus();
+  });
+
+  // ── Screen Capture Handler (Interactive Source Picker) ──
+  // Use session.defaultSession for global coverage across all windows and subframes.
+  session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+    console.log('[Electron] Display media request received at defaultSession level');
+    // Create a small selection window
+    let pickerWindow = new BrowserWindow({
+      width: 500,
+      height: 600,
+      parent: mainWindow,
+      modal: true,
+      title: 'Choose what to share',
+      backgroundColor: '#1a1a2e',
+      webPreferences: {
+        preload: path.join(__dirname, 'picker-preload.cjs'),
+        contextIsolation: true,
+        nodeIntegration: false,
+      }
+    });
+
+    // Handle source selection from the picker window
+    ipcMain.once('source-selected', (event, sourceId) => {
+      if (pickerWindow) {
+        pickerWindow.close();
+        pickerWindow = null;
+      }
+
+      desktopCapturer.getSources({ types: ['screen', 'window'] }).then((sources) => {
+        const selectedSource = sources.find(s => s.id === sourceId);
+        if (selectedSource) {
+          callback({ video: selectedSource, audio: 'loopback' });
+        } else {
+          callback({});
+        }
+      });
+    });
+
+    // Handle request for sources from the picker window
+    ipcMain.handleOnce('get-sources', async () => {
+      const sources = await desktopCapturer.getSources({ 
+        types: ['window', 'screen'],
+        thumbnailSize: { width: 320, height: 180 },
+        fetchWindowIcons: true
+      });
+      
+      return sources.map(s => ({
+        id: s.id,
+        name: s.name,
+        thumbnail: s.thumbnail.toDataURL()
+      }));
+    });
+
+    pickerWindow.loadFile(path.join(__dirname, 'picker.html'));
+    
+    pickerWindow.on('closed', () => {
+      ipcMain.removeHandler('get-sources');
+      // If closed without selection, callback with empty to cancel
+      if (pickerWindow) callback({});
+    });
+  });
+
+  // ── Source Picker IPC Handler (for direct React API calls) ──
+  ipcMain.handle('show-source-picker', async () => {
+    return new Promise((resolve) => {
+      let pickerWindow = new BrowserWindow({
+        width: 500,
+        height: 600,
+        parent: mainWindow,
+        modal: true,
+        title: 'Choose what to share',
+        backgroundColor: '#1a1a2e',
+        webPreferences: {
+          preload: path.join(__dirname, 'picker-preload.cjs'),
+          contextIsolation: true,
+          nodeIntegration: false,
+        }
+      });
+
+      // Handle source selection
+      ipcMain.once('source-selected', (event, sourceId) => {
+        if (pickerWindow) {
+          pickerWindow.close();
+          pickerWindow = null;
+          resolve(sourceId);
+        }
+      });
+
+      // Provide sources to the picker window
+      ipcMain.handleOnce('get-sources-internal', async () => {
+        const sources = await desktopCapturer.getSources({ 
+          types: ['window', 'screen'],
+          thumbnailSize: { width: 320, height: 180 },
+          fetchWindowIcons: true
+        });
+        return sources.map(s => ({
+          id: s.id,
+          name: s.name,
+          thumbnail: s.thumbnail.toDataURL()
+        }));
+      });
+
+      pickerWindow.loadFile(path.join(__dirname, 'picker.html'));
+
+      pickerWindow.on('closed', () => {
+        ipcMain.removeHandler('get-sources-internal');
+        if (pickerWindow) {
+          pickerWindow = null;
+          resolve(null);
+        }
+      });
+    });
   });
 
   mainWindow.webContents.on('did-fail-load', (_e, code, desc, url) => {
