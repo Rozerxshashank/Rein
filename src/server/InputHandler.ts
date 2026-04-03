@@ -39,6 +39,13 @@ export class InputHandler {
 	private touchFingerCount = 0
 	private lastPinchDist: number | null = null
 
+	// --- Dragging Logic ---
+	private lastTapEndTime = 0
+	private isDragging = false
+	private longPressTimer: ReturnType<typeof setTimeout> | null = null
+	private readonly LONG_PRESS_MS = 400
+	private readonly DOUBLE_TAP_MS = 300
+
 	constructor(throttleMs = 8) {
 		this.throttleMs = throttleMs
 	}
@@ -70,6 +77,22 @@ export class InputHandler {
 					this.touchStartTime = Date.now()
 					this.touchMoved = false
 					this.touchFingerCount = 0
+
+					// Check for Double-Tap-Hold Drag
+					const elapsedSinceLastEnd = Date.now() - this.lastTapEndTime
+					if (elapsedSinceLastEnd < this.DOUBLE_TAP_MS) {
+						this.isDragging = true
+						driver.click("left", true)
+					}
+
+					// Start Long-Press Timer
+					if (this.longPressTimer) clearTimeout(this.longPressTimer)
+					this.longPressTimer = setTimeout(() => {
+						if (!this.touchMoved && this.activeContacts.size === 1 && !this.isDragging) {
+							this.isDragging = true
+							driver.click("left", true)
+						}
+					}, this.LONG_PRESS_MS)
 				}
 				this.activeContacts.set(c.id, { x: c.x, y: c.y })
 				this.touchFingerCount = Math.max(this.touchFingerCount, this.activeContacts.size)
@@ -77,6 +100,11 @@ export class InputHandler {
 				if (this.activeContacts.size === 2) {
 					const pts = Array.from(this.activeContacts.values())
 					this.lastPinchDist = this.getTouchDistance(pts[0], pts[1])
+					// Cancel dragging if we transition to multi-touch
+					if (this.isDragging) {
+						this.isDragging = false
+						driver.click("left", false)
+					}
 				}
 			} else if (c.type === "move") {
 				const prev = this.activeContacts.get(c.id)
@@ -88,8 +116,13 @@ export class InputHandler {
 				const dx = (c.x - prev.x) * SCALE
 				const dy = (c.y - prev.y) * SCALE
 
-				if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+				if (Math.abs(dx) > 0.4 || Math.abs(dy) > 0.4) {
 					this.touchMoved = true
+					// If moved significantly, cancel the long-press timer
+					if (this.longPressTimer) {
+						clearTimeout(this.longPressTimer)
+						this.longPressTimer = null
+					}
 				}
 
 				if (fingerCount === 1) {
@@ -124,6 +157,10 @@ export class InputHandler {
 				this.activeContacts.set(c.id, { x: c.x, y: c.y })
 			} else if (c.type === "end") {
 				this.activeContacts.delete(c.id)
+				if (this.longPressTimer) {
+					clearTimeout(this.longPressTimer)
+					this.longPressTimer = null
+				}
 
 				if (this.activeContacts.size < 2) {
 					this.lastPinchDist = null
@@ -131,10 +168,16 @@ export class InputHandler {
 
 				if (this.activeContacts.size === 0) {
 					const elapsed = Date.now() - this.touchStartTime
-					if (!this.touchMoved && elapsed < 300) {
+
+					if (this.isDragging) {
+						this.isDragging = false
+						driver.click("left", false)
+						this.lastTapEndTime = 0 // Reset tap timer after a drag
+					} else if (!this.touchMoved && elapsed < 300) {
 						if (this.touchFingerCount === 1) {
 							driver.click("left", true)
 							setTimeout(() => driver.click("left", false), 50)
+							this.lastTapEndTime = Date.now()
 						} else if (this.touchFingerCount === 2) {
 							driver.click("right", true)
 							setTimeout(() => driver.click("right", false), 50)
@@ -142,6 +185,8 @@ export class InputHandler {
 							driver.click("middle", true)
 							setTimeout(() => driver.click("middle", false), 50)
 						}
+					} else {
+						this.lastTapEndTime = 0
 					}
 					this.touchFingerCount = 0
 				}
