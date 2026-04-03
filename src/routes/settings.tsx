@@ -111,7 +111,7 @@ function SettingsPage() {
 
 	useEffect(() => {
 		if (typeof window === "undefined") return
-		if (window.location.hostname !== "localhost") return
+		if (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") return
 
 		fetch("/api/ip")
 			.then((r) => r.json())
